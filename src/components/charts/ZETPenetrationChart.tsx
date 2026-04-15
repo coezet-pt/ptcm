@@ -27,7 +27,7 @@ export default function ZETPenetrationChart({ years, policy }: Props) {
 
   return (
     <ChartCard title="ZET Penetration" description="% of annual sales that are zero-emission" csvData={csvData} csvFilename="zet_penetration">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
           <XAxis dataKey="year" tick={{ fontSize: 10 }} />
           <YAxis tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={40} />
