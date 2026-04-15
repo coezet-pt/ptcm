@@ -27,6 +27,7 @@ export interface TCOResult {
   opexPerKm: number;
   fuelCostPerKm: number;
   maintPerKm: number;
+  manpowerPerKm: number;
   tollPerKm: number;
   resalePct: number;
 }
@@ -39,6 +40,11 @@ const CNG_TANK_BASE_LARGE = 250000;
 const CNG_TANK_GROWTH = 0.01; // 1% YoY
 const LNG_VALVES_BASE = 100000;
 const LNG_VALVES_GROWTH = 0.01;
+
+// Manpower (driver + crew) constants — back-solved from Excel B1
+const MANPOWER_BASE_2025_DIESEL = 400000;  // ₹4L/yr (Diesel, CNG, LNG, H2-ICE)
+const MANPOWER_BASE_2025_BET    = 460000;  // ₹4.6L/yr (BET, FCET)
+const MANPOWER_GROWTH = 0.04534;            // 4.53% YoY — (971000/400000)^(1/20)-1
 
 // Toll constants
 const TOLL_BASE_PER_KM = 2.5; // ₹/km in 2025
@@ -255,7 +261,13 @@ export function computeTCO(
         effectiveToll = tollPerKm * (1 - waiverAvg);
       }
 
-      const opexPerKm = fuelPerKm + maintPerKm + effectiveToll;
+      const baseManpower = (pt === 'BET' || pt === 'H2-FCET')
+        ? MANPOWER_BASE_2025_BET
+        : MANPOWER_BASE_2025_DIESEL;
+      const manpowerPerYear = baseManpower * Math.pow(1 + MANPOWER_GROWTH, dy);
+      const manpowerPerKm = manpowerPerYear / bucket.annualKm;
+
+      const opexPerKm = fuelPerKm + maintPerKm + effectiveToll + manpowerPerKm;
       const totalOpex = opexPerKm * bucket.annualKm * FINANCE.useful_life_years;
       const totalCost = capex + totalOpex;
       const tcoPerKm = totalCost / (bucket.annualKm * FINANCE.useful_life_years);
@@ -264,7 +276,7 @@ export function computeTCO(
       ptResults[pt] = {
         tcoPerKm, vehiclePrice: price, totalCost,
         capexPerKm, opexPerKm, fuelCostPerKm: fuelPerKm,
-        maintPerKm: maintPerKm, tollPerKm: effectiveToll, resalePct,
+        maintPerKm, manpowerPerKm, tollPerKm: effectiveToll, resalePct,
       };
     }
     result[bucket.id] = ptResults;
@@ -278,12 +290,13 @@ export function computeTCO(
       for (const pt of POWERTRAINS) {
         const r = b1[pt];
         console.log(pt, {
-          vehiclePrice: Math.round(r.vehiclePrice),
+          vehiclePrice_lakh: (r.vehiclePrice / 100000).toFixed(2),
           tcoPerKm: r.tcoPerKm.toFixed(2),
           capexPerKm: r.capexPerKm.toFixed(2),
           opexPerKm: r.opexPerKm.toFixed(2),
           fuelCostPerKm: r.fuelCostPerKm.toFixed(4),
           maintPerKm: r.maintPerKm.toFixed(4),
+          manpowerPerKm: r.manpowerPerKm.toFixed(4),
           tollPerKm: r.tollPerKm.toFixed(4),
           resalePct: r.resalePct,
         });
