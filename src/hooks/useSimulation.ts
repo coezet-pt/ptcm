@@ -87,6 +87,33 @@ function runSimulation(config: ScenarioConfig): SimulationResult {
     console.groupEnd();
 
     console.groupEnd();
+
+    // Verification block
+    if ((window as any).__SIM_DEBUG__) {
+      console.group('🔬 PTTM verification — BAU expected values');
+      const expected: Record<number, Record<string, number>> = {
+        2030: { BET: 0.0077, 'H2-ICE': 0.0006, 'H2-FCET': 0.0001, CNG: 0.0232, LNG: 0.0013 },
+        2045: { BET: 0.5693, 'H2-ICE': 0.0677, 'H2-FCET': 0.0612, CNG: 0.1183, LNG: 0.0086 },
+        2055: { BET: 0.6995, 'H2-ICE': 0.1187, 'H2-FCET': 0.1818, CNG: 0.0000, LNG: 0.0000 },
+      };
+      for (const [yearStr, exp] of Object.entries(expected)) {
+        const yr = +yearStr;
+        const idx = yr - START_YEAR;
+        const yearData = result.years[idx];
+        console.log(`Year ${yr}:`);
+        if (yearData) {
+          for (const [pt, expVal] of Object.entries(exp)) {
+            const actual = yearData.shareByPT[pt as any] ?? 0;
+            const diff = Math.abs(actual - expVal);
+            const ok = diff < 0.02;
+            console.log(`  ${pt}: expected ${(expVal*100).toFixed(2)}%, actual ${(actual*100).toFixed(2)}%`, ok ? '✅' : '❌');
+          }
+        } else {
+          console.log('  no data');
+        }
+      }
+      console.groupEnd();
+    }
   }
 
   return result;
