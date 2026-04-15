@@ -1,0 +1,451 @@
+/**
+ * Power Train Choice Model — extracted constants from
+ * Power_Train_Choice_Model_Final_v4_15042026.xlsx
+ *
+ * Drop this entire file at: src/lib/constants/extracted.ts
+ *
+ * All values are taken directly from the source Excel. Do NOT modify by hand —
+ * regenerate from the workbook if the model changes upstream.
+ */
+
+// ===========================================================================
+// POWERTRAIN ENUM
+// ===========================================================================
+export type Powertrain = 'Diesel' | 'CNG' | 'LNG' | 'BET' | 'H2-ICE' | 'H2-FCET';
+
+export const POWERTRAINS: Powertrain[] = [
+  'Diesel', 'CNG', 'LNG', 'BET', 'H2-ICE', 'H2-FCET'
+];
+
+export const POWERTRAIN_COLORS: Record<Powertrain, string> = {
+  'Diesel':  '#6b7280',
+  'CNG':     '#f59e0b',
+  'LNG':     '#f97316',
+  'BET':     '#10b981',
+  'H2-ICE':  '#3b82f6',
+  'H2-FCET': '#8b5cf6',
+};
+
+// ===========================================================================
+// VEHICLE-SIZE BASE PRICES (2025 INR) — source: 'Changing with year' rows 19-27, 30-38, 74-82
+// engine_trans = engine + transmission cost (used for ZET = base_glider component)
+// epowertrain  = E-powertrain cost (motor + electronics for BET/FCET)
+// diesel_total = total diesel vehicle on-road price 2025
+// ===========================================================================
+export type VehicleSize =
+  | '15T Rigid' | '19T Rigid' | '28T Rigid' | '35T Rigid' | '48T Rigid'
+  | '28T Tipper' | '35T Tipper' | '40T Tractor' | '55T Tractor';
+
+export const VEHICLE_BASE_PRICES_2025: Record<VehicleSize, {
+  engine_trans: number;
+  e_powertrain: number;
+  diesel_total: number;
+}> = {
+  '15T Rigid':   { engine_trans: 525000,  e_powertrain: 1400000, diesel_total: 2000000 },
+  '19T Rigid':   { engine_trans: 625000,  e_powertrain: 1400000, diesel_total: 2750000 },
+  '28T Rigid':   { engine_trans: 650000,  e_powertrain: 1400000, diesel_total: 3600000 },
+  '35T Rigid':   { engine_trans: 650000,  e_powertrain: 1700000, diesel_total: 4000000 },
+  '48T Rigid':   { engine_trans: 750000,  e_powertrain: 1700000, diesel_total: 4700000 },
+  '28T Tipper':  { engine_trans: 650000,  e_powertrain: 1700000, diesel_total: 4200000 },
+  '35T Tipper':  { engine_trans: 750000,  e_powertrain: 1700000, diesel_total: 4800000 },
+  '40T Tractor': { engine_trans: 650000,  e_powertrain: 1400000, diesel_total: 4300000 },
+  '55T Tractor': { engine_trans: 750000,  e_powertrain: 1700000, diesel_total: 5000000 },
+};
+
+// BS-VII regulatory bump applied to all diesel prices in 2030 (one-time +₹4 lakh)
+export const BS_VII_PRICE_BUMP_2030 = 400000;
+
+// ===========================================================================
+// 14 BUCKETS — source: 'No change with year' rows 5-18, 'Buckets' sheet col I
+// ===========================================================================
+export interface Bucket {
+  id: string;             // 'B1' .. 'B14'
+  useCase: string;
+  size: VehicleSize;
+  tivShare2045: number;   // share of total TIV in 2045 (sums to ~0.92, residual ~8% is "Other")
+
+  // Operational params (constants, not user-editable in Quick mode)
+  annualKm: number;
+  workingDays: number;
+  kmPerDay: number;
+  ulw: number;            // unladen weight kg (diesel)
+  gvw: number;            // gross vehicle weight kg
+
+  // Powertrain efficiencies
+  dieselKMPL: number;
+  cngKmPerKg: number;
+  lngKmPerKg: number;
+  h2iceKmPerKg: number;
+  betKwhPerKm: number;
+  fcetKmPerKg: number;
+
+  // Powertrain-specific spec (depends on size)
+  betBatteryKWh: number;
+  fcetBatteryKWh: number;
+  fcetFuelCellKW: number;
+  h2TankKg: number;       // H2 ICE tank capacity in kg
+
+  // Tyre counts
+  tyreRib: number;
+  tyreLug: number;
+
+  // Maintenance per km (₹/km, 7-year average)
+  maintDieselPerKm: number;
+  maintCngLngH2icePerKm: number;
+}
+
+export const BUCKETS: Bucket[] = [
+  { id: 'B1',  useCase: 'Market Load',                 size: '19T Rigid',   tivShare2045: 0.0657, annualKm: 108000, workingDays: 300, kmPerDay: 360, ulw: 8000,  gvw: 18500, dieselKMPL: 5.2, cngKmPerKg: 5.4, lngKmPerKg: 5.3,  h2iceKmPerKg: 15.6, betKwhPerKm: 0.95, fcetKmPerKg: 20.8, betBatteryKWh: 200, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 4,  maintDieselPerKm: 2.8,  maintCngLngH2icePerKm: 3.3 },
+  { id: 'B2',  useCase: 'Market Load',                 size: '28T Rigid',   tivShare2045: 0.0621, annualKm: 99000,  workingDays: 275, kmPerDay: 360, ulw: 9000,  gvw: 28000, dieselKMPL: 4.5, cngKmPerKg: 4.8, lngKmPerKg: 4.65, h2iceKmPerKg: 13.5, betKwhPerKm: 1.20, fcetKmPerKg: 18.0, betBatteryKWh: 250, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 8,  maintDieselPerKm: 4.2,  maintCngLngH2icePerKm: 4.7 },
+  { id: 'B3',  useCase: 'Market Load',                 size: '48T Rigid',   tivShare2045: 0.0533, annualKm: 108000, workingDays: 300, kmPerDay: 360, ulw: 12500, gvw: 47500, dieselKMPL: 2.9, cngKmPerKg: 3.1, lngKmPerKg: 3.0,  h2iceKmPerKg: 8.7,  betKwhPerKm: 1.35, fcetKmPerKg: 11.6, betBatteryKWh: 350, fcetBatteryKWh: 80, fcetFuelCellKW: 120, h2TankKg: 28.2, tyreRib: 4, tyreLug: 12, maintDieselPerKm: 7.7,  maintCngLngH2icePerKm: 8.2 },
+  { id: 'B4',  useCase: 'Parcel Load and FMCG',        size: '19T Rigid',   tivShare2045: 0.0504, annualKm: 108000, workingDays: 300, kmPerDay: 360, ulw: 8000,  gvw: 18500, dieselKMPL: 5.0, cngKmPerKg: 5.4, lngKmPerKg: 5.2,  h2iceKmPerKg: 15.0, betKwhPerKm: 0.90, fcetKmPerKg: 20.0, betBatteryKWh: 200, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 4,  maintDieselPerKm: 2.8,  maintCngLngH2icePerKm: 3.3 },
+  { id: 'B5',  useCase: 'Parcel Load and FMCG',        size: '28T Rigid',   tivShare2045: 0.1149, annualKm: 108000, workingDays: 300, kmPerDay: 360, ulw: 9500,  gvw: 28000, dieselKMPL: 4.5, cngKmPerKg: 4.8, lngKmPerKg: 4.65, h2iceKmPerKg: 13.5, betKwhPerKm: 1.15, fcetKmPerKg: 18.0, betBatteryKWh: 250, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 8,  maintDieselPerKm: 4.2,  maintCngLngH2icePerKm: 4.7 },
+  { id: 'B6',  useCase: 'Perishables',                 size: '15T Rigid',   tivShare2045: 0.0699, annualKm: 120000, workingDays: 300, kmPerDay: 400, ulw: 6500,  gvw: 16000, dieselKMPL: 6.0, cngKmPerKg: 6.3, lngKmPerKg: 6.15, h2iceKmPerKg: 18.0, betKwhPerKm: 0.85, fcetKmPerKg: 24.0, betBatteryKWh: 200, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 4,  maintDieselPerKm: 3.1,  maintCngLngH2icePerKm: 3.6 },
+  { id: 'B7',  useCase: 'Construction & Mining',       size: '28T Tipper',  tivShare2045: 0.1213, annualKm: 67200,  workingDays: 280, kmPerDay: 240, ulw: 13500, gvw: 28000, dieselKMPL: 3.8, cngKmPerKg: 4.0, lngKmPerKg: 3.9,  h2iceKmPerKg: 11.4, betKwhPerKm: 1.30, fcetKmPerKg: 15.2, betBatteryKWh: 250, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 8,  maintDieselPerKm: 8.6,  maintCngLngH2icePerKm: 9.1 },
+  { id: 'B8',  useCase: 'Construction & Mining',       size: '35T Tipper',  tivShare2045: 0.1758, annualKm: 67200,  workingDays: 280, kmPerDay: 240, ulw: 15000, gvw: 35000, dieselKMPL: 3.0, cngKmPerKg: 3.2, lngKmPerKg: 3.1,  h2iceKmPerKg: 9.0,  betKwhPerKm: 1.40, fcetKmPerKg: 12.0, betBatteryKWh: 300, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 4, tyreLug: 8,  maintDieselPerKm: 10.9, maintCngLngH2icePerKm: 11.4 },
+  { id: 'B9',  useCase: 'Cement (Bulkers & Bagged)',   size: '48T Rigid',   tivShare2045: 0.0627, annualKm: 115200, workingDays: 320, kmPerDay: 360, ulw: 12500, gvw: 47500, dieselKMPL: 2.9, cngKmPerKg: 3.1, lngKmPerKg: 3.0,  h2iceKmPerKg: 8.7,  betKwhPerKm: 1.40, fcetKmPerKg: 11.6, betBatteryKWh: 350, fcetBatteryKWh: 80, fcetFuelCellKW: 120, h2TankKg: 28.2, tyreRib: 4, tyreLug: 12, maintDieselPerKm: 7.7,  maintCngLngH2icePerKm: 8.2 },
+  { id: 'B10', useCase: 'Cement (Bulkers & Bagged)',   size: '55T Tractor', tivShare2045: 0.0470, annualKm: 108000, workingDays: 300, kmPerDay: 360, ulw: 15500, gvw: 55000, dieselKMPL: 2.6, cngKmPerKg: 2.8, lngKmPerKg: 2.7,  h2iceKmPerKg: 7.8,  betKwhPerKm: 1.45, fcetKmPerKg: 10.4, betBatteryKWh: 300, fcetBatteryKWh: 80, fcetFuelCellKW: 120, h2TankKg: 28.2, tyreRib: 2, tyreLug: 16, maintDieselPerKm: 6.5,  maintCngLngH2icePerKm: 7.0 },
+  { id: 'B11', useCase: 'Steel & metal products',      size: '55T Tractor', tivShare2045: 0.0971, annualKm: 96000,  workingDays: 320, kmPerDay: 300, ulw: 15000, gvw: 55000, dieselKMPL: 2.6, cngKmPerKg: 2.7, lngKmPerKg: 2.65, h2iceKmPerKg: 7.8,  betKwhPerKm: 1.40, fcetKmPerKg: 10.4, betBatteryKWh: 300, fcetBatteryKWh: 80, fcetFuelCellKW: 120, h2TankKg: 28.2, tyreRib: 2, tyreLug: 16, maintDieselPerKm: 8.3,  maintCngLngH2icePerKm: 8.8 },
+  { id: 'B12', useCase: 'Tankers - POL & CNG cascades', size: '28T Rigid',  tivShare2045: 0.0304, annualKm: 75000,  workingDays: 300, kmPerDay: 250, ulw: 9500,  gvw: 28000, dieselKMPL: 4.7, cngKmPerKg: 4.9, lngKmPerKg: 4.8,  h2iceKmPerKg: 14.1, betKwhPerKm: 1.05, fcetKmPerKg: 18.8, betBatteryKWh: 250, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 8,  maintDieselPerKm: 3.5,  maintCngLngH2icePerKm: 4.0 },
+  { id: 'B13', useCase: 'Tankers - Non POL',           size: '28T Rigid',   tivShare2045: 0.0364, annualKm: 90000,  workingDays: 300, kmPerDay: 300, ulw: 9500,  gvw: 28000, dieselKMPL: 4.7, cngKmPerKg: 4.9, lngKmPerKg: 4.8,  h2iceKmPerKg: 14.1, betKwhPerKm: 1.05, fcetKmPerKg: 18.8, betBatteryKWh: 250, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 8,  maintDieselPerKm: 3.5,  maintCngLngH2icePerKm: 4.0 },
+  { id: 'B14', useCase: 'LPG bullet tankers',          size: '40T Tractor', tivShare2045: 0.0129, annualKm: 60000,  workingDays: 240, kmPerDay: 250, ulw: 19000, gvw: 39500, dieselKMPL: 3.6, cngKmPerKg: 3.8, lngKmPerKg: 3.7,  h2iceKmPerKg: 10.8, betKwhPerKm: 1.25, fcetKmPerKg: 14.4, betBatteryKWh: 300, fcetBatteryKWh: 70, fcetFuelCellKW: 80,  h2TankKg: 28.2, tyreRib: 2, tyreLug: 12, maintDieselPerKm: 4.3,  maintCngLngH2icePerKm: 4.8 },
+];
+
+// Sum of all bucket shares = ~0.9099. Residual ~9% is modelled as Diesel-only "Other".
+export const BUCKET_TIV_SHARE_TOTAL = BUCKETS.reduce((s, b) => s + b.tivShare2045, 0);
+export const OTHER_DIESEL_TIV_SHARE = 1 - BUCKET_TIV_SHARE_TOTAL;
+
+// ===========================================================================
+// RESALE VALUE TIERS (% of purchase price after 7 years)
+// Tier1 = until 2035 sales | Tier2 = 2036-2045 | Tier3 = after 2045
+// Two profile groups in Excel — "high duty" (cement, mining, tipper) and "general"
+// ===========================================================================
+export type ResaleProfile = 'general' | 'high_duty';
+
+export const RESALE_VALUES: Record<ResaleProfile, Record<Powertrain, [number, number, number]>> = {
+  general:   { // applies to B1, B2, B4, B5, B6, B12, B13, B14
+    'Diesel':  [0.55, 0.45, 0.35],
+    'CNG':     [0.50, 0.40, 0.30],
+    'LNG':     [0.50, 0.40, 0.30],
+    'BET':     [0.20, 0.30, 0.40],
+    'H2-ICE':  [0.25, 0.35, 0.40],
+    'H2-FCET': [0.10, 0.20, 0.30],
+  },
+  high_duty: { // applies to B3, B7, B8, B9, B10, B11
+    'Diesel':  [0.50, 0.40, 0.30],
+    'CNG':     [0.45, 0.35, 0.25],
+    'LNG':     [0.45, 0.35, 0.25],
+    'BET':     [0.15, 0.25, 0.35],
+    'H2-ICE':  [0.20, 0.30, 0.35],
+    'H2-FCET': [0.05, 0.15, 0.25],
+  },
+};
+
+// Maps each bucket to its resale profile
+export const BUCKET_RESALE_PROFILE: Record<string, ResaleProfile> = {
+  'B1': 'general',  'B2': 'general',  'B3': 'high_duty', 'B4': 'general',
+  'B5': 'general',  'B6': 'general',  'B7': 'high_duty', 'B8': 'high_duty',
+  'B9': 'high_duty','B10': 'high_duty','B11': 'high_duty','B12': 'general',
+  'B13': 'general', 'B14': 'general',
+};
+
+// ===========================================================================
+// CHOICE MODEL — elasticities & weightings (Excel 'Input Sheet' rows 8-12, col D & E)
+// Final exponent multiplier in factor formula = elasticity × weighting / E2
+// where E2 = 1.5 (the global weighting denominator)
+// ===========================================================================
+export const CHOICE_FACTORS = {
+  TCO:                { elasticity: 9.0,  weighting: 10 },
+  vehiclePrice:       { elasticity: 8.83, weighting: 9  },
+  ratedPayload:       { elasticity: 7.17, weighting: 6  },
+  tatGradeability:    { elasticity: 5.5,  weighting: 3  },
+  rangeFillingTime:   { elasticity: 7.5,  weighting: 8  },
+};
+export const CHOICE_WEIGHT_DENOMINATOR = 1.5; // Excel cell E2/F2
+
+// Relative powertrain ratings for the non-TCO non-Price factors (Excel 'No change with year' D52, D53)
+// Applied as the "value" in the EXP(elasticity * weighting * (base/value - 1)) formula
+export const POWERTRAIN_RATINGS = {
+  // Ratings used as DENOMINATORS in the factor formula (Diesel = 1.0 baseline)
+  tatGradeability: { 'Diesel': 1.0, 'CNG': 0.95, 'LNG': 0.95, 'BET': 1.15, 'H2-ICE': 0.95, 'H2-FCET': 1.15 },
+  rangeFillingTime:{ 'Diesel': 1.0, 'CNG': 1.05, 'LNG': 1.10, 'BET': 1.20, 'H2-ICE': 1.0,  'H2-FCET': 1.0  },
+} as const;
+
+// ===========================================================================
+// LOAN, INSURANCE, USEFUL LIFE
+// ===========================================================================
+export const FINANCE = {
+  diesel_cng_lng_h2ice_interest_pa_default: 0.12,
+  zet_interest_pa_default: 0.12,        // BEST scenario can lower to 0.10
+  loan_tenure_years: 7,
+  insurance_rate_per_year: 0.02,        // 2% of vehicle price/year
+  useful_life_years: 7,
+};
+
+// Battery & fuel-cell life
+export const TECH_SPECS = {
+  battery_life_cycles: 3000,
+  fuel_cell_life_hours: 25000,
+  battery_energy_density_kg_per_kwh: 8,
+  fuel_cell_power_density_kg_per_kw: 4,
+  adblue_consumption_l_per_l_diesel: 0.05,
+};
+
+// CNG/LNG/H2 tank physical sizes (used to compute tank cost contribution)
+export const TANK_SIZES = {
+  cng_small_ltrs: 480,  cng_large_ltrs: 960,  cng_density_kg_per_l: 0.20,
+  lng_small_ltrs: 450,  lng_large_ltrs: 990,  lng_density_kg_per_l: 0.35,
+  h2_small_ltrs:  1200, h2_large_ltrs:  2400, h2_density_kg_per_m3_at_350bar: 23.5,
+};
+
+// ===========================================================================
+// OEM MARGIN SCHEDULE for BET (multiplier applied to e-powertrain + battery cost)
+// Higher = OEM keeps more margin, less cost-passed-through to buyer in early years
+// Source: 'No change with year' row 34
+// ===========================================================================
+export const BET_OEM_MARGIN_BY_YEAR: Record<number, number> = (() => {
+  const m: Record<number, number> = {};
+  for (let y = 2025; y <= 2027; y++) m[y] = 0.50;
+  m[2028] = 0.45;
+  m[2029] = 0.40;
+  m[2030] = 0.35;
+  for (let y = 2031; y <= 2040; y++) m[y] = 0.30;
+  for (let y = 2041; y <= 2055; y++) m[y] = 0.25;
+  return m;
+})();
+
+// H2-FCET OEM margin — flat 0.40 until 2040, 0.35 thereafter
+export const FCET_OEM_MARGIN_BY_YEAR: Record<number, number> = (() => {
+  const m: Record<number, number> = {};
+  for (let y = 2025; y <= 2040; y++) m[y] = 0.40;
+  for (let y = 2041; y <= 2055; y++) m[y] = 0.35;
+  return m;
+})();
+
+// ===========================================================================
+// TIV (Total Industry Volume) per year — all heavy trucks combined
+// Source: 'AnnualSalesSummary Revised' row 75. Pre-2025 values are
+// historical, used for stock evolution. From 2025+ used to compute
+// annual sales by powertrain.
+// ===========================================================================
+export const HISTORICAL_SALES: Record<number, number> = {
+  2001: 33256,  2002: 38380,  2003: 43757,  2004: 49997,  2005: 56999,
+  2006: 61186,  2007: 64659,  2008: 70360,  2009: 78121,  2010: 85868,
+  2011: 93708,  2012: 102292, 2013: 111304, 2014: 120475, 2015: 158398,
+  2016: 214258, 2017: 211032, 2018: 247608, 2019: 274768, 2020: 143237,
+  2021: 125404, 2022: 193951, 2023: 274193, 2024: 267078,
+};
+
+export const TIV_PROJECTION: Record<number, number> = {
+  2025: 267370, 2026: 292810, 2027: 306590, 2028: 311550, 2029: 340650,
+  2030: 349950, 2031: 357130, 2032: 393810, 2033: 419910, 2034: 435110,
+  2035: 459480, 2036: 480610, 2037: 500010, 2038: 520490, 2039: 544970,
+  2040: 570540, 2041: 599070, 2042: 627500, 2043: 654020, 2044: 679990,
+  2045: 707250, 2046: 734040, 2047: 762490, 2048: 775820, 2049: 799700,
+  2050: 853510, 2051: 887890, 2052: 922960, 2053: 958330, 2054: 993980,
+  2055: 1029830,
+};
+
+// Pre-2025 stock baseline — used as starting diesel stock at end of 2024
+export const DIESEL_STOCK_END_2024 = 5193503;
+
+// 20-year scrappage policy — vehicles 20+ years old retire each year
+export const SCRAPPAGE_AGE_YEARS = 20;
+
+// Pre-2001 backlog — flat 125,000/year diesel scrappage until backlog clears
+export const PRE_2001_DIESEL_SCRAPPAGE_PER_YEAR = 125000;
+export const PRE_2001_SCRAPPAGE_END_YEAR = 2040; // approximate — backlog cleared by ~2040
+
+// ===========================================================================
+// GOMPERTZ / WEIBULL PARAMETERS
+// Start year per powertrain × vehicle size — when supply begins
+// Source: 'No change with year' rows 65-73, cols J-O
+// ===========================================================================
+export const START_OF_SUPPLY: Record<VehicleSize, Record<Powertrain, number>> = {
+  '15T Rigid':   { Diesel: 2025, CNG: 2027, LNG: 2030, BET: 2027, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '19T Rigid':   { Diesel: 2025, CNG: 2027, LNG: 2030, BET: 2027, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '28T Rigid':   { Diesel: 2025, CNG: 2027, LNG: 2030, BET: 2028, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '35T Rigid':   { Diesel: 2025, CNG: 2028, LNG: 2030, BET: 2028, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '48T Rigid':   { Diesel: 2025, CNG: 2028, LNG: 2030, BET: 2028, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '28T Tipper':  { Diesel: 2025, CNG: 2027, LNG: 2030, BET: 2028, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '35T Tipper':  { Diesel: 2025, CNG: 2028, LNG: 2030, BET: 2028, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '40T Tractor': { Diesel: 2025, CNG: 2028, LNG: 2028, BET: 2028, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+  '55T Tractor': { Diesel: 2025, CNG: 2028, LNG: 2028, BET: 2027, 'H2-ICE': 2036, 'H2-FCET': 2040 },
+};
+
+// Gompertz initial pilot share W (very small — represents 2025 sales as fraction of total)
+export const PTTM_PILOT_SHARE = {
+  BET: 0.0009052,    // ~0.09% of TIV in 2025
+  'H2-ICE': 0.0001,
+  'H2-FCET': 0.0001,
+};
+
+// Weibull shape parameter for CNG/LNG (already past inflection)
+export const WEIBULL_SHAPE_ALPHA = 5;
+export const WEIBULL_PEAK_YEAR = 2045;
+
+// 2025 known volumes (calibration anchors for Weibull)
+export const CNG_UNITS_2025 = 6318;
+export const LNG_UNITS_2025 = 368;
+
+// ===========================================================================
+// SCENARIO PRESET INFLECTION YEARS (10% share year per powertrain)
+// Source: 'Scenarios' sheet rows 20-21 + 'No change with year' V65/W65/X65
+// ===========================================================================
+export type ScenarioName = 'BAU' | 'BWS-1' | 'BWS-2' | 'BEST';
+
+export const SCENARIO_INFLECTION_YEARS: Record<ScenarioName, {
+  BET: number; 'H2-ICE': number; 'H2-FCET': number;
+}> = {
+  'BAU':   { BET: 2038, 'H2-ICE': 2050, 'H2-FCET': 2050 },
+  'BWS-1': { BET: 2036, 'H2-ICE': 2049, 'H2-FCET': 2049 },
+  'BWS-2': { BET: 2036, 'H2-ICE': 2049, 'H2-FCET': 2049 },
+  'BEST':  { BET: 2032, 'H2-ICE': 2049, 'H2-FCET': 2049 },
+};
+
+export const SCENARIO_MATURITY_YEARS: Record<ScenarioName, {
+  BET: number; 'H2-ICE': number; 'H2-FCET': number;
+}> = {
+  'BAU':   { BET: 2035, 'H2-ICE': 2042, 'H2-FCET': 2045 },
+  'BWS-1': { BET: 2035, 'H2-ICE': 2042, 'H2-FCET': 2045 },
+  'BWS-2': { BET: 2035, 'H2-ICE': 2042, 'H2-FCET': 2045 },
+  'BEST':  { BET: 2033, 'H2-ICE': 2040, 'H2-FCET': 2045 },
+};
+
+// ===========================================================================
+// BAU DEFAULT SCENARIO CONFIG — drop-in for ScenarioConfig.parameters
+// All deltas are decimal (0.025 = 2.5% per year)
+// ===========================================================================
+export const BAU_PARAMETERS = {
+  diesel_price_per_l:          { baseValue: 88.93,  d2630: 0.0208, d3140: 0.0208, d4150: 0.0208, d5155: 0.0208 },
+  cng_price_per_kg:            { baseValue: 87,     d2630: 0.025,  d3140: 0.025,  d4150: 0.025,  d5155: 0.025  },
+  lng_price_per_kg:            { baseValue: 83,     d2630: 0.025,  d3140: 0.025,  d4150: 0.025,  d5155: 0.025  },
+  green_h2_production_per_kg:  { baseValue: 600,    d2630: -0.04,  d3140: -0.03,  d4150: -0.01,  d5155: 0      },
+  grey_h2_production_per_kg:   { baseValue: 250,    d2630: 0.02,   d3140: 0.02,   d4150: 0.02,   d5155: 0.02   },
+  h2_compression_storage_per_kg:{ baseValue: 175,   d2630: -0.03,  d3140: -0.02,  d4150: -0.02,  d5155: 0      },
+  electricity_per_kwh:         { baseValue: 18,     d2630: 0,      d3140: -0.02,  d4150: -0.02,  d5155: -0.01  },
+  battery_cost_per_kwh:        { baseValue: 9900,   d2630: -0.015, d3140: -0.025, d4150: -0.01,  d5155: 0.01   },
+  fuel_cell_cost_per_kw:       { baseValue: 36000,  d2630: -0.03,  d3140: -0.03,  d4150: -0.02,  d5155: 0.01   },
+  lng_tank_cost_per_kg:        { baseValue: 3050,   d2630: 0.01,   d3140: 0.01,   d4150: 0.01,   d5155: 0.01   },
+  h2_tank_cost_per_kg:         { baseValue: 56000,  d2630: -0.05,  d3140: -0.04,  d4150: 0.01,   d5155: 0.01   },
+  adblue_per_l:                { baseValue: 55,     d2630: 0.025,  d3140: 0.025,  d4150: 0.025,  d5155: 0.025  },
+  diesel_vehicle_growth:       { baseValue: 0,      d2630: 0.03,   d3140: 0.03,   d4150: 0.03,   d5155: 0.03   },
+  engine_trans_growth:         { baseValue: 0,      d2630: 0.02,   d3140: 0.02,   d4150: 0.02,   d5155: 0.02   },
+  e_powertrain_growth:         { baseValue: 0,      d2630: -0.04,  d3140: -0.01,  d4150: 0.01,   d5155: 0.01   },
+};
+
+// BAU policy levers
+export const BAU_POLICY = {
+  bet_demand_incentive_per_kwh: 0,
+  fcet_demand_incentive_per_kwh: 0,
+  interest_rate_zet: 0.12,
+  loan_tenure_years: 7,
+  electricity_subsidy_per_kwh: 0,
+  toll_waiver_pct_first_5y: 0,
+  toll_waiver_pct_next_5y: 0,
+  bet_inflection_year: 2038,
+  h2ice_inflection_year: 2050,
+  fcet_inflection_year: 2050,
+  h2_source_mix: 'green_only' as const,
+  bet_resale_2046_plus: 0.40,
+  diesel_price_5pct_yoy_after_2045: false,
+};
+
+// BEST scenario overrides (apply on top of BAU)
+export const BEST_OVERRIDES = {
+  parameters: {
+    green_h2_production_per_kg:  { baseValue: 600, d2630: -0.04, d3140: -0.035, d4150: -0.03, d5155: -0.03 },
+    h2_compression_storage_per_kg:{ baseValue: 175, d2630: -0.04, d3140: -0.03,  d4150: -0.03, d5155: -0.02 },
+    diesel_price_per_l:          { baseValue: 88.93, d2630: 0.0208, d3140: 0.0208, d4150: 0.0208, d5155: 0.05 }, // +5% YoY after 2045
+  },
+  policy: {
+    bet_demand_incentive_per_kwh: 10000, // until 2030, then 5000 till 2035
+    fcet_demand_incentive_per_kwh: 30000,
+    interest_rate_zet: 0.10,
+    electricity_subsidy_per_kwh: 2,
+    toll_waiver_pct_first_5y: 1.0,
+    toll_waiver_pct_next_5y: 0.5,
+    bet_inflection_year: 2032,
+    bet_resale_2046_plus: 0.45,
+  },
+};
+
+// ===========================================================================
+// EMISSION FACTORS (Well-to-Wheel kgCO2e) — source: 'Emissions' sheet rows 2-7
+// ===========================================================================
+export const EMISSION_FACTORS = {
+  diesel_kgCO2e_per_l:        2.60,  // 0.53 WTT + 2.07 TTW
+  cng_kgCO2e_per_kg:          2.21,  // = 0.85 × diesel total
+  lng_kgCO2e_per_kg:          2.39,  // = 0.92 × diesel total
+  bet_kgCO2e_per_kwh:         0.972, // grid factor
+  h2ice_green_kgCO2e_per_km:  0.07,
+  h2fcet_green_kgCO2e_per_km: 0.07,
+};
+
+// ===========================================================================
+// TCO PARITY YEARS (precomputed in Excel 'Buckets' sheet cols O-T)
+// Used directly for Chart F — the year when each powertrain reaches TCO
+// parity with diesel for a given bucket and scenario.
+// ===========================================================================
+export const TCO_PARITY_YEARS = {
+  scenario4_BEST: { // 'Buckets' cols R-T (Scenario 4)
+    'B1':  { BET: 2039, 'H2-ICE': 2045, 'H2-FCET': 2047 },
+    'B2':  { BET: 2040, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B3':  { BET: 2034, 'H2-ICE': 2044, 'H2-FCET': 2045 },
+    'B4':  { BET: 2036, 'H2-ICE': 2045, 'H2-FCET': 2046 },
+    'B5':  { BET: 2039, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B6':  { BET: 2039, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B7':  { BET: 2039, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B8':  { BET: 2035, 'H2-ICE': 2045, 'H2-FCET': 2044 },
+    'B9':  { BET: 2035, 'H2-ICE': 2045, 'H2-FCET': 2044 },
+    'B10': { BET: 2032, 'H2-ICE': 2045, 'H2-FCET': 2044 },
+    'B11': { BET: 2032, 'H2-ICE': 2045, 'H2-FCET': 2044 },
+    'B12': { BET: 2043, 'H2-ICE': 2045, 'H2-FCET': 2048 },
+    'B13': { BET: 2040, 'H2-ICE': 2045, 'H2-FCET': 2046 },
+    'B14': { BET: 2042, 'H2-ICE': 2045, 'H2-FCET': 2047 },
+  },
+  scenario1_BAU: { // 'Buckets' cols O-Q (Scenario 1)
+    'B1':  { BET: 2027, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B2':  { BET: 2028, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B3':  { BET: 2026, 'H2-ICE': 2045, 'H2-FCET': 2043 },
+    'B4':  { BET: 2026, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B5':  { BET: 2027, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B6':  { BET: 2027, 'H2-ICE': 2046, 'H2-FCET': 2045 },
+    'B7':  { BET: 2027, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B8':  { BET: 2026, 'H2-ICE': 2046, 'H2-FCET': 2043 },
+    'B9':  { BET: 2027, 'H2-ICE': 2045, 'H2-FCET': 2042 },
+    'B10': { BET: 2026, 'H2-ICE': 2043, 'H2-FCET': 2043 },
+    'B11': { BET: 2026, 'H2-ICE': 2045, 'H2-FCET': 2043 },
+    'B12': { BET: 2029, 'H2-ICE': 2047, 'H2-FCET': 2046 },
+    'B13': { BET: 2027, 'H2-ICE': 2045, 'H2-FCET': 2045 },
+    'B14': { BET: 2028, 'H2-ICE': 2040, 'H2-FCET': 2042 },
+  },
+};
+
+// ===========================================================================
+// BASELINE SANITY-CHECK ASSERTIONS (for Phase 4.5)
+// Run these after simulation; warn if any fail
+// ===========================================================================
+export const BAU_BASELINE_CHECKS = {
+  total_sales_2025: { value: 267370, tolerance: 0.02 },
+  total_sales_2045: { value: 707250, tolerance: 0.02 },
+  total_sales_2055: { value: 1029830, tolerance: 0.02 },
+  zet_share_2045_min: 0.10,  // BAU should give ≥10% ZET share by 2045
+  zet_share_2045_max: 0.45,
+  zet_share_2055_min: 0.30,
+  zet_share_2055_max: 0.70,
+  diesel_2025_units_min: 240000,
+  diesel_2025_units_max: 270000,
+};
+
+// ===========================================================================
+// VEHICLE-SIZE → BUCKET reverse mapping (used when projecting prices per size)
+// ===========================================================================
+export const SIZE_TO_BUCKETS: Record<VehicleSize, string[]> = (() => {
+  const m: Partial<Record<VehicleSize, string[]>> = {};
+  for (const b of BUCKETS) {
+    if (!m[b.size]) m[b.size] = [];
+    m[b.size]!.push(b.id);
+  }
+  return m as Record<VehicleSize, string[]>;
+})();
