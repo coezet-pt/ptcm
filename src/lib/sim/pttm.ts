@@ -153,6 +153,17 @@ export function computePTTM(
       const peakShare = shares2045[bucket.id]?.[pt] ?? 0;
       const curve = weibullCurve(startYear, peakShare, pt);
 
+      // DEBUG: log Weibull for B12 CNG
+      if (typeof window !== 'undefined' && (window as any).__SIM_DEBUG__ && bucket.id === 'B12' && pt === 'CNG') {
+        console.log(`[PTTM Weibull DEBUG] B12 CNG: peakShare W=${peakShare.toFixed(6)}, startYear=${startYear}`);
+        const debugYears = [2025, 2035, 2045, 2055];
+        for (const dy of debugYears) {
+          const idx = dy - START_YEAR;
+          const val = curve[idx] ?? 0;
+          console.log(`  ${dy}: share=${(val * 100).toFixed(4)}%${isNaN(val) ? ' ⚠️ NaN' : ''}${!isFinite(val) ? ' ⚠️ Infinity' : ''}`);
+        }
+      }
+
       for (let i = 0; i < YEAR_COUNT; i++) {
         annual[i].share[pt] += curve[i] * weight;
       }
