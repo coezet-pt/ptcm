@@ -88,7 +88,22 @@ function runSimulation(config: ScenarioConfig): SimulationResult {
 
     console.groupEnd();
 
-    // Verification block
+    // Choice model verification
+    if ((window as any).__SIM_DEBUG__) {
+      console.group('🎯 Choice model verification — B1 2045');
+      const expectedB1: Record<string, number> = {
+        Diesel: 0.1652, CNG: 0.1060, LNG: 0.0951,
+        BET: 0.3640, 'H2-ICE': 0.1026, 'H2-FCET': 0.1671,
+      };
+      for (const [pt, expShare] of Object.entries(expectedB1)) {
+        const actual = shares2045['B1']?.[pt as any] ?? 0;
+        const ok = Math.abs(actual - expShare) < 0.05;
+        console.log(`${pt}: expected ${(expShare*100).toFixed(1)}%, actual ${(actual*100).toFixed(1)}%`, ok ? '✅' : '❌');
+      }
+      console.groupEnd();
+    }
+
+    // PTTM verification block
     if ((window as any).__SIM_DEBUG__) {
       console.group('🔬 PTTM verification — BAU expected values');
       const expected: Record<number, Record<string, number>> = {
