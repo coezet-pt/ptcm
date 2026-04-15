@@ -43,6 +43,23 @@ export interface PolicyConfig {
   h2_source_mix: H2SourceMix;
   bet_resale_2046_plus: number;
   diesel_price_5pct_yoy_after_2045: boolean;
+  // Phase 2 incentive fields
+  bet_incentive_phase1_end_year: number;
+  bet_demand_incentive_phase2_per_kwh: number;
+  bet_incentive_phase2_end_year: number;
+  fcet_incentive_phase1_end_year: number;
+  fcet_demand_incentive_phase2_per_kwh: number;
+  fcet_incentive_phase2_end_year: number;
+  electricity_subsidy_end_year: number;
+  toll_waiver_first_period_years: number;
+  toll_waiver_second_period_years: number;
+  // Maturity years
+  bet_maturity_year: number;
+  h2ice_maturity_year: number;
+  fcet_maturity_year: number;
+  // Additional flags
+  range_filling_concern_after_2035: boolean;
+  gvw_payload_compensation_t: number;
 }
 
 // ── Full scenario config ──

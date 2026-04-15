@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { ScenarioConfig, PolicyConfig, ParameterKey } from '@/lib/types';
 import type { ScenarioName } from '@/lib/constants/extracted';
 import { BAU_PARAMETERS, BAU_POLICY } from '@/lib/constants/extracted';
+import { SCENARIO_CONFIGS } from '@/lib/constants/scenarios';
 
 // Build the default BAU config from constants
 const bauConfig: ScenarioConfig = {
@@ -40,10 +41,11 @@ export function ScenarioProvider({ children }: { children: React.ReactNode }) {
             const name = row.name as ScenarioName;
             // If config is empty, fall back to BAU defaults
             const hasConfig = row.config && Object.keys(row.config as object).length > 0;
+            const fallback = SCENARIO_CONFIGS[name] ?? bauConfig;
             map[name] = {
               id: row.id,
               description: row.description || '',
-              config: hasConfig ? (row.config as unknown as ScenarioConfig) : structuredClone(bauConfig),
+              config: hasConfig ? (row.config as unknown as ScenarioConfig) : structuredClone(fallback),
             };
           }
           setPresets(map);

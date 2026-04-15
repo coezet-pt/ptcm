@@ -107,6 +107,38 @@ export function computeShares(
         console.log(`  ${pt}: share=${(b1[pt] * 100).toFixed(2)}%`);
       }
     }
+    // B12 CNG vs Diesel at 2045
+    if (targetYear === 2045) {
+      const b12 = result['B12'];
+      const b12tco = tcoResults['B12'];
+      if (b12 && b12tco) {
+        console.table({
+          'B12_CNG_vs_Diesel_2045': {
+            CNG_TCO: b12tco['CNG']?.tcoPerKm?.toFixed(2),
+            Diesel_TCO: b12tco['Diesel']?.tcoPerKm?.toFixed(2),
+            CNG_price: b12tco['CNG']?.vehiclePrice,
+            Diesel_price: b12tco['Diesel']?.vehiclePrice,
+            CNG_share: b12['CNG'],
+            Diesel_share: b12['Diesel'],
+          }
+        });
+      }
+      // Log raw factor args for CNG in B1
+      const b1tco = tcoResults['B1'];
+      if (b1tco && b1tco['CNG']) {
+        const dieselTCO = b1tco['Diesel'].tcoPerKm;
+        const dieselPrice = b1tco['Diesel'].vehiclePrice;
+        const cf = CHOICE_FACTORS;
+        const cw = CHOICE_WEIGHT_DENOMINATOR;
+        console.log('[ChoiceModel DEBUG] B1 CNG factor args at 2045:', {
+          tcoArg: (cf.TCO.elasticity * cf.TCO.weighting / cw * (dieselTCO / b1tco['CNG'].tcoPerKm - 1)).toFixed(4),
+          priceArg: (cf.vehiclePrice.elasticity * cf.vehiclePrice.weighting / cw * (dieselPrice / b1tco['CNG'].vehiclePrice - 1)).toFixed(4),
+          payloadArg: 'see payloadRatio',
+          tatArg: (cf.tatGradeability.elasticity * cf.tatGradeability.weighting / cw * (1.0 / POWERTRAIN_RATINGS.tatGradeability['CNG'] - 1)).toFixed(4),
+          rangeArg: (cf.rangeFillingTime.elasticity * cf.rangeFillingTime.weighting / cw * (1.0 / POWERTRAIN_RATINGS.rangeFillingTime['CNG'] - 1)).toFixed(4),
+        });
+      }
+    }
   }
 
   return result;
