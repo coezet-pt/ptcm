@@ -1,94 +1,73 @@
-# Phase 4.5+5 Completion: Scenario Configs, Type Updates, Debug Logging, and Build Fix
+# Step 1: Wire Unused Policy Fields into Simulation
 
-## Summary
+## My understanding of the semantics
 
-Four things to do: (1) fix the recharts v3 TS build error in `chart.tsx`, (2) expand `PolicyConfig` with 17 new fields, (3) create `src/lib/constants/scenarios.ts` with all 4 scenario configs and seed them to Supabase, (4) add enhanced CNG/LNG debug logging to `choiceModel.ts` and `pttm.ts`.
+**Incentive phasing (BET and FCET):** The demand incentive per kWh is NOT a single flat value across all years. It operates in two phases: when `year ≤ phase1_end_year`, the full `bet_demand_incentive_per_kwh` applies; when `phase1_end_year < year ≤ phase2_end_year`, the reduced `bet_demand_incentive_phase2_per_kwh` applies; after `phase2_end_year`, no incentive at all (zero). Same logic for FCET using its own three fields. **Electricity subsidy:** `electricity_subsidy_per_kwh` applies only when `year ≤ electricity_subsidy_end_year`, zero after. **Toll waivers:** Instead of hardcoded 5y/2y split, use `toll_waiver_first_period_years` and `toll_waiver_second_period_years` — the effective toll over the 7-year useful life averages: first_pct waiver for `first_period` years, second_pct for `second_period` years, full toll for remaining years (if any within 7). **BET resale override:** When `targetYear ≥ 2046` and pt is BET, use `policy.bet_resale_2046_plus` instead of the RESALE_VALUES tier-2 lookup. **Diesel price override:** When `diesel_price_5pct_yoy_after_2045` is true, the d5155 delta for `diesel_price_per_l` becomes 0.05 regardless of what the parameter says. **Range concern removal:** When `range_filling_concern_after_2035 === false` and `targetYear ≥ 2035`, all powertrains get rangeFillingTime = 1.0 (no penalty). **Maturity year clamping:** At `maturity_year`, the Gompertz curve should have reached at least 50% of its saturation value; if the unclamped curve is lower, scale it up.
 
-## 1. Fix Build Error — `src/components/ui/chart.tsx`
+## Files to modify (4)
 
-The recharts v3 (`^3.8.1`) removed `payload` and `label` from the Tooltip content props type. Fix by adding explicit type casting/extension at the component props level:
+### `src/lib/sim/tco.ts`
 
-- Line 95: Change the intersection type to add `payload?: any[]; label?: string;` to the props
-- Line 233: Change `Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign">` to inline `{ payload?: any[]; verticalAlign?: string }`
+- **BET incentive** (line 117): Replace `policy.bet_demand_incentive_per_kwh` with phased logic using `year`, `bet_incentive_phase1_end_year`, `bet_demand_incentive_phase2_per_kwh`, `bet_incentive_phase2_end_year`
+- **FCET incentive** (line 134): Same pattern with FCET fields
+- **Electricity subsidy** (line 160): Wrap with `year <= policy.electricity_subsidy_end_year` check
+- **Toll waiver** (lines 219-223): Use `toll_waiver_first_period_years` / `toll_waiver_second_period_years` instead of hardcoded 5/2, compute weighted average over `FINANCE.useful_life_years` (7)
+- **BET resale** (lines 198-201): When `pt === 'BET' && targetYear >= 2046`, use `policy.bet_resale_2046_plus` instead of `RESALE_VALUES` lookup
 
-This is a known recharts v3 breaking change in the shadcn chart component.
+### `src/lib/sim/timeSeries.ts`
 
-## 2. Expand `PolicyConfig` — `src/lib/types.ts`
+- In `buildTimeSeries`, accept `PolicyConfig` as second arg
+- When `policy.diesel_price_5pct_yoy_after_2045 === true` and `key === 'diesel_price_per_l'`, override `delta` to `0.05` for years > 2045
 
-Add these 17 fields to `PolicyConfig`:
+### `src/lib/sim/choiceModel.ts`
+
+- In `computeShares`, accept `PolicyConfig` as additional arg
+- When `policy.range_filling_concern_after_2035 === false && targetYear >= 2035`, use `1.0` for all `rangeFillingTime` ratings instead of `POWERTRAIN_RATINGS.rangeFillingTime[pt]`
+- Add `// TODO: gvw_payload_compensation_t not yet wired — add as adjustment to (gvw-ulw) in payload factor`
+
+### `src/lib/sim/pttm.ts`
+
+- Pass `maturityYear` to `gompertzCurve`
+- After computing curve, check value at `maturityYear` index; if < `0.5 * AB`, scale the curve segment up to that year so it meets the threshold
+
+### Callers: `src/hooks/useSimulation.ts`
+
+- Pass `policy` to `buildTimeSeries`
+- Pass `policy` to `computeShares`
+
+## Step 2: Seed Supabase scenarios table
+
+- Use Supabase tool to update the 4 rows with full config JSONB from `SCENARIO_CONFIGS`
+
+## Step 3: Debug output
+
+- Run simulation with `__SIM_DEBUG__=true`, capture and share B12 CNG diagnostic console output
+
+## Step 4: Phase 6 StatCards
+
+- Deferred until Steps 1-3 validated
+
+Approved with two clarifications:
+
+**1. Toll waiver averaging is slightly wrong.** You wrote "weighted average over 7 years" — that's right *in concept* but be specific: the formula should be:
 
 ```
-bet_incentive_phase1_end_year: number;
-bet_demand_incentive_phase2_per_kwh: number;
-bet_incentive_phase2_end_year: number;
-fcet_incentive_phase1_end_year: number;
-fcet_demand_incentive_phase2_per_kwh: number;
-fcet_incentive_phase2_end_year: number;
-electricity_subsidy_end_year: number;
-toll_waiver_first_period_years: number;
-toll_waiver_second_period_years: number;
-bet_maturity_year: number;
-h2ice_maturity_year: number;
-fcet_maturity_year: number;
-range_filling_concern_after_2035: boolean;
-gvw_payload_compensation_t: number;
+toll_waiver_per_km_avg =
+  (first_period_years * toll_waiver_pct_first_5y +
+   second_period_years * toll_waiver_pct_next_5y +
+   Math.max(0, 7 - first_period - second_period) * 0) / 7
 ```
 
-(h2_source_mix, diesel_price_5pct_yoy_after_2045, bet_resale_2046_plus already exist)
+Then `effective_toll_per_km = base_toll_per_km * (1 - toll_waiver_per_km_avg)`. Cap `first_period + second_period` at 7 to prevent overcounting if a scenario sets longer periods than vehicle life. (BWS-2 has first=10, second=0 — so the cap matters: it should clamp to 7, not run for 10 years.)
 
-## 3. Update `BAU_POLICY` — `src/lib/constants/extracted.ts`
+**2. Maturity year clamping is conceptually wrong as you wrote it.** "Scale the curve segment up to that year" will create a discontinuity at `maturity_year` (the curve will jump up before, then continue from the unscaled point). Two better options — pick the simpler one:
 
-Add default values for all new fields to `BAU_POLICY` so BAU config remains complete:
+Option A (recommended, simple): If unclamped `share(maturity_year) < 0.5 * AB`, recompute `c` (growth rate) such that `share(maturity_year) = 0.5 * AB` exactly, then use the new `c` for the entire curve. This shifts the inflection earlier without creating a discontinuity.
 
-```
-bet_incentive_phase1_end_year: 2030,
-bet_demand_incentive_phase2_per_kwh: 0,
-bet_incentive_phase2_end_year: 2035,
-fcet_incentive_phase1_end_year: 2030,
-fcet_demand_incentive_phase2_per_kwh: 0,
-fcet_incentive_phase2_end_year: 2035,
-electricity_subsidy_end_year: 2035,
-toll_waiver_first_period_years: 5,
-toll_waiver_second_period_years: 5,
-bet_maturity_year: 2035,
-h2ice_maturity_year: 2042,
-fcet_maturity_year: 2045,
-range_filling_concern_after_2035: false,
-gvw_payload_compensation_t: 0,
-```
+Option B (skip if too complex): Don't apply the clamp at all — instead, log a warning when `share(maturity_year) < 0.5 * AB` saying "saturation level may be unrealistically low for this scenario; consider raising 2055 target shares". Maturity year then becomes informational only.
 
-## 4. Create `src/lib/constants/scenarios.ts`
+If Option A's recompute is non-trivial (it requires inverting a logarithm), do Option B. We'll revisit if scenarios show implausibly slow ZET adoption.
 
-Full `ScenarioConfig` objects for BAU, BWS-1, BWS-2, BEST. Each has `parameters` (15 keys) and `policy` (all fields including new ones). BAU reuses `BAU_PARAMETERS` + extended `BAU_POLICY`. BWS-1/BWS-2/BEST have their own parameter overrides and policy configs.
-
-Since the user said they're "sending" this file but didn't attach it, I'll create the structure with BAU fully populated (from existing constants) and BWS-1/BWS-2/BEST using the existing `BEST_OVERRIDES` + `SCENARIO_INFLECTION_YEARS` + `SCENARIO_MATURITY_YEARS` to populate them as completely as possible from extracted.ts data.
-
-## 5. Seed Supabase `scenarios` table
-
-Use the Supabase insert tool to UPDATE the 4 existing scenario rows with their full `config` JSONB from the scenarios.ts objects.
-
-## 6. Update `ScenarioContext.tsx`
-
-Import scenario configs from `scenarios.ts` as fallbacks when DB rows have empty config. This ensures the app works even before DB is seeded.
-
-## 7. Enhanced Debug Logging
-
-`**choiceModel.ts**`: When `__SIM_DEBUG__`, add `console.table` for B12 CNG vs Diesel at 2045 showing TCO, price, and share. Also log all 5 factor args for CNG in B1.
-
-`**pttm.ts**`: When `__SIM_DEBUG__`, log Weibull inputs and outputs for B12 CNG: peakShare W, computed shares at 2025/2035/2045/2055, NaN/Infinity warnings.
-
-## Files Modified (7)
-
-1. `src/components/ui/chart.tsx` — fix TS errors for recharts v3
-2. `src/lib/types.ts` — expand PolicyConfig
-3. `src/lib/constants/extracted.ts` — expand BAU_POLICY defaults
-4. `src/lib/constants/scenarios.ts` — create with 4 scenario configs
-5. `src/contexts/ScenarioContext.tsx` — use scenario configs as fallbacks
-6. `src/lib/sim/choiceModel.ts` — enhanced debug logging
-7. `src/lib/sim/pttm.ts` — enhanced debug logging
-
-No database schema changes needed. Will use insert tool to update scenario config data.
-
-**why is model Model Health Checks not [assing in full**
+Proceed with all 4 files + scenario seeding + debug capture. Defer StatCards.
 
 &nbsp;
