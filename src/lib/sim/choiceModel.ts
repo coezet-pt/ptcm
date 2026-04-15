@@ -131,9 +131,8 @@ export function computeShares(
           TAT: factors.tatGradeability.toFixed(4),
           range: factors.rangeFillingTime.toFixed(4),
         }));
-        if (tcoFactorBET > 100) {
-          console.error('❌❌❌ Formula in loop is STILL using old multiplier. Self-test is misleading.');
-        }
+      console.log(`ℹ️ B1 BET TCO factor = ${tcoFactorBET.toFixed(3)}. Excel reference = 7.186. ` +
+            `Discrepancy means TCO INPUTS are wrong — check tco.ts, not choiceModel.ts.`);
       }
 
       const score = factors.TCO
