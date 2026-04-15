@@ -95,18 +95,16 @@ export function computeShares(
       const rangeArg = ELASTICITIES.rangeFillingTime * GLOBAL_MULTIPLIER * (dieselRange / rangeRating - 1);
 
       const factors = {
-        [pt]: {
-          TCO: Math.exp(clamp(tcoArg, -50, 50)),
-          vehiclePrice: Math.exp(clamp(priceArg, -50, 50)),
-          ratedPayload: Math.exp(clamp(payloadArg, -50, 50)),
-          tatGradeability: Math.exp(clamp(tatArg, -50, 50)),
-          rangeFillingTime: Math.exp(clamp(rangeArg, -50, 50)),
-        },
+        TCO: Math.exp(clamp(tcoArg, -50, 50)),
+        vehiclePrice: Math.exp(clamp(priceArg, -50, 50)),
+        ratedPayload: Math.exp(clamp(payloadArg, -50, 50)),
+        tatGradeability: Math.exp(clamp(tatArg, -50, 50)),
+        rangeFillingTime: Math.exp(clamp(rangeArg, -50, 50)),
       };
 
       if (bucket.id === 'B1' && targetYear === 2045 && pt === 'BET' && !__debugDone) {
         __debugDone = true;
-        const tcoFactorBET = factors['BET'].TCO;
+        const tcoFactorBET = factors.TCO;
         console.log(
           `🧪 RUNTIME CHECK: B1 BET TCO factor = ${tcoFactorBET.toFixed(3)} ` +
           `(Excel expects 7.186, broken value would be ~6400)`
@@ -116,11 +114,11 @@ export function computeShares(
         }
       }
 
-      const score = factors[pt].TCO
-        + factors[pt].vehiclePrice
-        + factors[pt].ratedPayload
-        + factors[pt].tatGradeability
-        + factors[pt].rangeFillingTime;
+      const score = factors.TCO
+        + factors.vehiclePrice
+        + factors.ratedPayload
+        + factors.tatGradeability
+        + factors.rangeFillingTime;
 
       rawScores[pt] = score;
     }
