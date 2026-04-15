@@ -23,14 +23,14 @@ export default function ShareChart({ years }: Props) {
 
   return (
     <ChartCard title="Market Share by Powertrain" description="% of annual sales" csvData={csvData} csvFilename="market_share">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <AreaChart data={data} stackOffset="expand" margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
           <XAxis dataKey="year" tick={{ fontSize: 10 }} />
           <YAxis tickFormatter={v => `${(v * 100).toFixed(0)}%`} tick={{ fontSize: 10 }} width={40} />
           <Tooltip formatter={(v: number) => `${(v * 100).toFixed(1)}%`} labelFormatter={l => `Year ${l}`} />
           {[...POWERTRAINS].reverse().map(pt => (
             <Area key={pt} type="monotone" dataKey={pt} stackId="1"
-              fill={POWERTRAIN_COLORS[pt]} stroke={POWERTRAIN_COLORS[pt]} fillOpacity={0.8} />
+              fill={POWERTRAIN_COLORS[pt]} stroke={POWERTRAIN_COLORS[pt]} fillOpacity={0.8} dot={false} />
           ))}
         </AreaChart>
       </ResponsiveContainer>
