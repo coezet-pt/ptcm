@@ -349,6 +349,21 @@ export const BAU_POLICY = {
   h2_source_mix: 'green_only' as const,
   bet_resale_2046_plus: 0.40,
   diesel_price_5pct_yoy_after_2045: false,
+  // New fields
+  bet_incentive_phase1_end_year: 2030,
+  bet_demand_incentive_phase2_per_kwh: 0,
+  bet_incentive_phase2_end_year: 2035,
+  fcet_incentive_phase1_end_year: 2030,
+  fcet_demand_incentive_phase2_per_kwh: 0,
+  fcet_incentive_phase2_end_year: 2035,
+  electricity_subsidy_end_year: 2035,
+  toll_waiver_first_period_years: 5,
+  toll_waiver_second_period_years: 5,
+  bet_maturity_year: 2035,
+  h2ice_maturity_year: 2042,
+  fcet_maturity_year: 2045,
+  range_filling_concern_after_2035: false,
+  gvw_payload_compensation_t: 0,
 };
 
 // BEST scenario overrides (apply on top of BAU)
