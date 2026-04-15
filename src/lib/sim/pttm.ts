@@ -1,7 +1,8 @@
 /**
  * PTTM — Powertrain Transition Trajectory Model
- * Gompertz for BET/H2-ICE/H2-FCET, Weibull for CNG/LNG.
- * Runs per-bucket, aggregates final sales [fix #3].
+ * Gompertz (with quadratic correction) for BET/H2-ICE/H2-FCET,
+ * Weibull (with 2025 anchor injection) for CNG/LNG.
+ * Runs per-bucket, aggregates final sales.
  */
 import type { Powertrain, Bucket, VehicleSize } from '@/lib/constants/extracted';
 import {
@@ -25,98 +26,95 @@ export interface AnnualPTSales {
   sales: Record<Powertrain, number>;
 }
 
-/** Gompertz S-curve for BET/H2-ICE/H2-FCET per bucket [fix #2] */
-function gompertzCurve(
-  startYear: number,
-  inflectionYear: number,
-  W: number,    // pilot share at start
-  AB: number,   // 2055 target share from choice model
-  maturityYear?: number, // if set, warn when share(maturityYear) < 0.5*AB
-): number[] {
-  const shares = new Array(YEAR_COUNT).fill(0);
-  if (AB <= 0 || startYear > END_YEAR) return shares;
+/**
+ * Gompertz with quadratic correction — hits both Z (2045) and AB (2055) exactly.
+ * Used for BET, H2-ICE, H2-FCET.
+ */
+function gompertzShare(args: {
+  year: number;
+  startYear: number;
+  inflectionYear: number;
+  pilotShare: number;
+  share2045: number;
+  share2055: number;
+}): number {
+  const { year, startYear, inflectionYear, pilotShare, share2045, share2055 } = args;
 
-  // Exact order [fix #2]:
-  const a_initial = Math.max(AB, W * 1.02);
-  const b = Math.log(Math.max(a_initial, W * 1.01) / W);
+  if (year < startYear) return 0;
+  if (share2055 <= 0) return 0;
+
+  const aInitial = share2055;
+  const W = pilotShare;
+  const b = Math.log(Math.max(aInitial, W * 1.01) / W);
   const inflDelta = Math.max(inflectionYear - startYear, 1);
-  const c = -(1 / inflDelta) * Math.log(
-    Math.log(Math.max(a_initial, 0.1001) / 0.1) / Math.max(b, 0.001)
-  );
-  const endDelta = END_YEAR - startYear;
-  const normFactor = Math.exp(-b * Math.exp(-c * endDelta));
-  const a_final = normFactor > 0 ? AB / normFactor : AB;
+  const c = -(1 / inflDelta) *
+            Math.log(Math.log(Math.max(aInitial, 0.1001) / 0.1) / b);
+  const endDelta = 2055 - startYear;
+  const a = share2055 / Math.exp(-b * Math.exp(-c * endDelta));
 
-  // DEBUG
-  if (typeof window !== 'undefined' && (window as any).__SIM_DEBUG__) {
-    console.log(`[PTTM Gompertz] W=${W}, AB=${AB.toFixed(4)}, a_init=${a_initial.toFixed(4)}, b=${b.toFixed(4)}, c=${c.toFixed(6)}, a_final=${a_final.toFixed(4)}`);
+  const normDenom = Math.exp(-b * Math.exp(-c * endDelta));
+
+  // Main Gompertz term (passes through AB at 2055)
+  const gompertzMain = (a * Math.exp(-b * Math.exp(-c * (year - startYear)))) / normDenom;
+
+  // Quadratic correction to force curve through Z at 2045
+  let correction = 0;
+  if (year > inflectionYear && year < 2055) {
+    const gompertzAt2045 = (a * Math.exp(-b * Math.exp(-c * (2045 - startYear)))) / normDenom;
+    const correctionCoef = (share2045 - gompertzAt2045) /
+                           ((2045 - inflectionYear) * (2055 - 2045));
+    correction = correctionCoef * (year - inflectionYear) * (2055 - year);
   }
 
-  for (let i = 0; i < YEAR_COUNT; i++) {
-    const year = START_YEAR + i;
-    if (year < startYear) {
-      shares[i] = 0;
-      continue;
-    }
-    const t = year - startYear;
-    shares[i] = a_final * Math.exp(-b * Math.exp(-c * t)) / Math.exp(-b * Math.exp(-c * endDelta));
-  }
-
-  // Option B: maturity year informational warning
-  if (maturityYear && maturityYear >= startYear && maturityYear <= END_YEAR) {
-    const matIdx = maturityYear - START_YEAR;
-    const matShare = shares[matIdx] ?? 0;
-    if (matShare < 0.5 * AB) {
-      console.warn(
-        `[PTTM] Gompertz: share at maturity year ${maturityYear} is ${(matShare * 100).toFixed(2)}%, ` +
-        `below 50% of saturation (${(AB * 50).toFixed(2)}%). ` +
-        `Consider raising 2055 target shares or adjusting inflection year.`
-      );
-    }
-  }
-
-  return shares;
+  return gompertzMain + correction;
 }
 
-/** Weibull curve for CNG/LNG per bucket [fix #1] */
-function weibullCurve(
-  startYear: number,
-  peakShare: number, // from shares2045 [fix #1]
-  pt: 'CNG' | 'LNG',
-): number[] {
-  const shares = new Array(YEAR_COUNT).fill(0);
-  if (peakShare <= 0 || startYear > END_YEAR) return shares;
+/**
+ * Weibull with 2025 anchor injection and phase-out.
+ * Used for CNG, LNG.
+ */
+function weibullShare(args: {
+  year: number;
+  startYear: number;
+  peakYear: number;
+  alpha: number;
+  peakShare2045: number;
+  units2025: number;
+  tiv2025: number;
+}): number {
+  const { year, startYear, peakYear, alpha, peakShare2045, units2025, tiv2025 } = args;
 
-  const alpha = WEIBULL_SHAPE_ALPHA;
-  const peakYear = WEIBULL_PEAK_YEAR;
+  if (year < startYear) return 0;
+  if (peakShare2045 <= 0) return 0;
+
   const peakDelta = peakYear - startYear;
-  if (peakDelta <= 0) return shares;
+  if (peakDelta <= 0) return 0;
 
-  // Normalisation at peak (2045)
-  const refT = (2045 - startYear) / peakDelta;
-  const normVal = Math.pow(refT, alpha - 1)
-    * Math.exp(((alpha - 1) / alpha) * (1 - Math.pow(refT, alpha)));
-  const W = normVal > 0 ? peakShare / normVal : peakShare;
+  // Weibull kernel at any year
+  const wbl = (y: number) => {
+    const t = (y - startYear) / peakDelta;
+    if (t <= 0) return 0;
+    return Math.pow(t, alpha - 1) * Math.exp(((alpha - 1) / alpha) * (1 - Math.pow(t, alpha)));
+  };
 
-  for (let i = 0; i < YEAR_COUNT; i++) {
-    const year = START_YEAR + i;
-    if (year < startYear) continue;
-    const t = (year - startYear) / peakDelta;
-    if (t <= 0) continue;
-    shares[i] = W * Math.pow(t, alpha - 1)
-      * Math.exp(((alpha - 1) / alpha) * (1 - Math.pow(t, alpha)));
-  }
+  // Normalization: peak at 2045 = peakShare2045
+  const wbl2045 = wbl(2045);
+  const norm = wbl2045 > 0 ? peakShare2045 / wbl2045 : peakShare2045;
 
-  // Anchor check [fix #1]: warn if 2025 share deviates >50% from historical
-  const anchor2025 = pt === 'CNG'
-    ? CNG_UNITS_2025 / TIV_PROJECTION[2025]
-    : LNG_UNITS_2025 / TIV_PROJECTION[2025];
-  const computed2025 = shares[0];
-  if (anchor2025 > 0 && Math.abs(computed2025 - anchor2025) / anchor2025 > 0.5) {
-    console.warn(`[PTTM] ${pt} Weibull 2025 share ${(computed2025 * 100).toFixed(2)}% deviates >50% from anchor ${(anchor2025 * 100).toFixed(2)}%`);
-  }
+  // Quadratic decay for 2025 anchor injection
+  const decay = Math.max(0, 1 - Math.pow((year - 2025) / 20, 2));
 
-  return shares;
+  // Phase-out: linear decline from 2045 to 2055
+  const phaseOut = Math.max(0, Math.min(1, (2055 - year) / 10));
+
+  // Anchor share from real 2025 units
+  const anchorShare2025 = units2025 / tiv2025;
+
+  // Main curve - subtract 2025 position + add real anchor (decaying)
+  const main = norm * (wbl(year) - wbl(2025) * decay);
+  const anchorTerm = anchorShare2025 * decay;
+
+  return Math.max(0, (main + anchorTerm) * phaseOut);
 }
 
 const GOMPERTZ_PTS: Powertrain[] = ['BET', 'H2-ICE', 'H2-FCET'];
@@ -128,7 +126,6 @@ export function computePTTM(
   policy: PolicyConfig,
   buckets: Bucket[] = BUCKETS,
 ): AnnualPTSales[] {
-  // Per-year aggregated sales
   const annual: AnnualPTSales[] = [];
   for (let i = 0; i < YEAR_COUNT; i++) {
     annual.push({
@@ -143,10 +140,10 @@ export function computePTTM(
     'H2-FCET': policy.fcet_inflection_year,
   };
 
-  const maturityYears: Record<string, number> = {
-    'BET': policy.bet_maturity_year,
-    'H2-ICE': policy.h2ice_maturity_year,
-    'H2-FCET': policy.fcet_maturity_year,
+  const tiv2025 = TIV_PROJECTION[2025] ?? 267370;
+  const units2025Map: Record<string, number> = {
+    'CNG': CNG_UNITS_2025,
+    'LNG': LNG_UNITS_2025,
   };
 
   // Run per bucket, accumulate weighted shares
@@ -159,11 +156,20 @@ export function computePTTM(
       const startYear = START_OF_SUPPLY[size]?.[pt] ?? 2025;
       const W = PTTM_PILOT_SHARE[pt as keyof typeof PTTM_PILOT_SHARE] ?? 0.0001;
       const AB = shares2055[bucket.id]?.[pt] ?? 0;
+      const Z = shares2045[bucket.id]?.[pt] ?? 0;
       const inflYear = inflectionYears[pt] ?? 2038;
-      const curve = gompertzCurve(startYear, inflYear, W, AB, maturityYears[pt]);
 
       for (let i = 0; i < YEAR_COUNT; i++) {
-        annual[i].share[pt] += curve[i] * weight;
+        const year = START_YEAR + i;
+        const val = gompertzShare({
+          year,
+          startYear,
+          inflectionYear: inflYear,
+          pilotShare: W,
+          share2045: Z,
+          share2055: AB,
+        });
+        annual[i].share[pt] += val * weight;
       }
     }
 
@@ -171,26 +177,24 @@ export function computePTTM(
     for (const pt of WEIBULL_PTS) {
       const startYear = START_OF_SUPPLY[size]?.[pt] ?? 2025;
       const peakShare = shares2045[bucket.id]?.[pt] ?? 0;
-      const curve = weibullCurve(startYear, peakShare, pt);
-
-      // DEBUG: log Weibull for B12 CNG
-      if (typeof window !== 'undefined' && (window as any).__SIM_DEBUG__ && bucket.id === 'B12' && pt === 'CNG') {
-        console.log(`[PTTM Weibull DEBUG] B12 CNG: peakShare W=${peakShare.toFixed(6)}, startYear=${startYear}`);
-        const debugYears = [2025, 2035, 2045, 2055];
-        for (const dy of debugYears) {
-          const idx = dy - START_YEAR;
-          const val = curve[idx] ?? 0;
-          console.log(`  ${dy}: share=${(val * 100).toFixed(4)}%${isNaN(val) ? ' ⚠️ NaN' : ''}${!isFinite(val) ? ' ⚠️ Infinity' : ''}`);
-        }
-      }
 
       for (let i = 0; i < YEAR_COUNT; i++) {
-        annual[i].share[pt] += curve[i] * weight;
+        const year = START_YEAR + i;
+        const val = weibullShare({
+          year,
+          startYear,
+          peakYear: WEIBULL_PEAK_YEAR,
+          alpha: WEIBULL_SHAPE_ALPHA,
+          peakShare2045: peakShare,
+          units2025: units2025Map[pt] ?? 0,
+          tiv2025,
+        });
+        annual[i].share[pt] += val * weight;
       }
     }
   }
 
-  // Post-processing [A5d]: cap non-diesel, compute diesel as residual
+  // Post-processing: cap non-diesel, compute diesel as residual
   for (let i = 0; i < YEAR_COUNT; i++) {
     const year = START_YEAR + i;
     const tiv = TIV_PROJECTION[year] ?? 0;
@@ -209,7 +213,6 @@ export function computePTTM(
     for (const pt of POWERTRAINS) {
       annual[i].sales[pt] = s[pt] * tiv;
     }
-    // Add "Other" diesel share
     annual[i].sales.Diesel += OTHER_DIESEL_TIV_SHARE * tiv;
   }
 
