@@ -1,21 +1,31 @@
 
 
-# Add TCO Breakdown Diagnostic to `tco.ts`
+# Fix Misleading Assertion + Ensure TCO Diagnostic Fires
 
 ## Problem
-TCO values for B1 2045 are wrong (Diesel=41.46 vs Excel 56.94, BET=25.42 vs Excel 49.68). Need to see capex vs opex breakdown to pinpoint whether the bug is in vehicle price, fuel cost, or amortization.
+The `❌❌❌ Formula in loop is STILL using old multiplier` assertion in `choiceModel.ts` (line 134-136) is misleading — the choice model formula is correct, but TCO inputs from `tco.ts` are wrong, causing large factor values. The assertion blames the wrong file.
 
 ## Changes
 
+### `src/lib/sim/choiceModel.ts`
+**Lines 134-136** — Replace the misleading error assertion:
+```typescript
+// DELETE:
+if (tcoFactorBET > 100) {
+  console.error('❌❌❌ Formula in loop is STILL using old multiplier. Self-test is misleading.');
+}
+
+// REPLACE WITH:
+console.log(`ℹ️ B1 BET TCO factor = ${tcoFactorBET.toFixed(3)}. Excel reference = 7.186. ` +
+            `Discrepancy means TCO INPUTS are wrong — check tco.ts, not choiceModel.ts.`);
+```
+
 ### `src/lib/sim/tco.ts`
+The TCO breakdown diagnostic already exists at lines 267-286 and logs all intermediate values (`vehiclePrice`, `tcoPerKm`, `capexPerKm`, `opexPerKm`, `fuelCostPerKm`, `maintPerKm`, `tollPerKm`, `resalePct`) for B1 2045 when `__SIM_DEBUG__` is set. **No changes needed** — it's already there.
 
-1. **Expand `TCOResult` interface** to include diagnostic fields:
-   - `capexPerKm`, `opexPerKm`, `fuelCostPerKm`, `maintPerKm`, `tollPerKm`, `resalePct`
-
-2. **Store these values** in the `ptResults[pt]` assignment (line 251) — they're already computed as local variables, just need to be included in the return object.
-
-3. **Replace the existing DEBUG block** (lines 256-264) with the detailed diagnostic that logs all intermediate values for B1 2045 when `__SIM_DEBUG__` is set, including the Excel reference values.
-
-### No other files changed
-No changes to `choiceModel.ts`, `pttm.ts`, or `stockEmissions.ts`.
+### Verification
+After deploying, check DevTools console:
+- `❌❌❌` message should be **gone**
+- `ℹ️ B1 BET TCO factor` message should appear
+- `🔬 TCO TRACE — B1 2045` group should appear with full breakdown
 
