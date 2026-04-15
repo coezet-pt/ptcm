@@ -23,11 +23,11 @@ function stableStringify(obj: unknown): string {
 }
 
 function runSimulation(config: ScenarioConfig): SimulationResult {
-  const ts = buildTimeSeries(config.parameters);
+  const ts = buildTimeSeries(config.parameters, config.policy);
   const tco2045 = computeTCO(ts, config.policy, BUCKETS, 2045);
   const tco2055 = computeTCO(ts, config.policy, BUCKETS, 2055);
-  const shares2045 = computeShares(tco2045, BUCKETS, 2045);
-  const shares2055 = computeShares(tco2055, BUCKETS, 2055);
+  const shares2045 = computeShares(tco2045, BUCKETS, 2045, config.policy);
+  const shares2055 = computeShares(tco2055, BUCKETS, 2055, config.policy);
   const annualSales = computePTTM(shares2045, shares2055, config.policy);
   return computeStockEmissions(annualSales);
 }

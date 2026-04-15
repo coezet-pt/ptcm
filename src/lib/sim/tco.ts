@@ -114,7 +114,13 @@ function computeVehiclePrice(
       const oem = BET_OEM_MARGIN_BY_YEAR[Math.min(year, 2055)] ?? 0.25;
       const raw = (base.engine_trans * engineTransGrowth) + ePowertrain + batteryCost;
       const withMargin = raw * (1 + oem);
-      const incentive = policy.bet_demand_incentive_per_kwh * bucket.betBatteryKWh;
+      // Phased incentive: full until phase1_end, reduced until phase2_end, zero after
+      const betIncentivePerKwh = year <= policy.bet_incentive_phase1_end_year
+        ? policy.bet_demand_incentive_per_kwh
+        : year <= policy.bet_incentive_phase2_end_year
+          ? policy.bet_demand_incentive_phase2_per_kwh
+          : 0;
+      const incentive = betIncentivePerKwh * bucket.betBatteryKWh;
       return Math.max(0, withMargin - incentive);
     }
     case 'H2-ICE': {
@@ -131,7 +137,13 @@ function computeVehiclePrice(
       const oem = FCET_OEM_MARGIN_BY_YEAR[Math.min(year, 2055)] ?? 0.35;
       const raw = (base.engine_trans * engineTransGrowth) + ePowertrain + fcCost + batteryCost + h2TankCost;
       const withMargin = raw * (1 + oem);
-      const incentive = policy.fcet_demand_incentive_per_kwh * bucket.fcetBatteryKWh;
+      // Phased incentive: full until phase1_end, reduced until phase2_end, zero after
+      const fcetIncentivePerKwh = year <= policy.fcet_incentive_phase1_end_year
+        ? policy.fcet_demand_incentive_per_kwh
+        : year <= policy.fcet_incentive_phase2_end_year
+          ? policy.fcet_demand_incentive_phase2_per_kwh
+          : 0;
+      const incentive = fcetIncentivePerKwh * bucket.fcetBatteryKWh;
       return Math.max(0, withMargin - incentive);
     }
     default:
@@ -157,7 +169,8 @@ function computeFuelCostPerKm(
     case 'LNG':
       return getValueAtYear(ts.lng_price_per_kg, year) / bucket.lngKmPerKg;
     case 'BET': {
-      const elecPrice = getValueAtYear(ts.electricity_per_kwh, year) - policy.electricity_subsidy_per_kwh;
+      const subsidy = year <= policy.electricity_subsidy_end_year ? policy.electricity_subsidy_per_kwh : 0;
+      const elecPrice = getValueAtYear(ts.electricity_per_kwh, year) - subsidy;
       return Math.max(0, elecPrice) * bucket.betKwhPerKm;
     }
     case 'H2-ICE':
@@ -195,10 +208,13 @@ export function computeTCO(
     for (const pt of POWERTRAINS) {
       const price = computeVehiclePrice(pt, bucket, targetYear, ts, policy);
 
-      // Resale
+      // Resale — BET override for 2046+ purchases
       const profile = BUCKET_RESALE_PROFILE[bucket.id] ?? 'general';
       const tier = resaleTier(targetYear);
-      const resalePct = RESALE_VALUES[profile][pt][tier];
+      let resalePct = RESALE_VALUES[profile][pt][tier];
+      if (pt === 'BET' && targetYear >= 2046 && policy.bet_resale_2046_plus > 0) {
+        resalePct = policy.bet_resale_2046_plus;
+      }
       const resale = price * resalePct;
 
       // Finance
@@ -214,13 +230,17 @@ export function computeTCO(
       const fuelPerKm = computeFuelCostPerKm(pt, bucket, targetYear, ts, policy);
       const maintPerKm = getMaintenancePerKm(pt, bucket);
 
-      // Toll with waiver for ZET
+      // Toll with waiver for ZET — weighted average over useful life
       let effectiveToll = tollPerKm;
       if (isZET(pt)) {
-        // Average over 7 years: first 5y waiver, next 2y at next-5y rate
-        const first5 = tollPerKm * (1 - policy.toll_waiver_pct_first_5y);
-        const next2 = tollPerKm * (1 - policy.toll_waiver_pct_next_5y);
-        effectiveToll = (first5 * 5 + next2 * 2) / 7;
+        const life = FINANCE.useful_life_years; // 7
+        const p1 = Math.min(policy.toll_waiver_first_period_years, life);
+        const p2 = Math.min(policy.toll_waiver_second_period_years, life - p1);
+        const p3 = Math.max(0, life - p1 - p2);
+        const waiverAvg = (p1 * policy.toll_waiver_pct_first_5y
+          + p2 * policy.toll_waiver_pct_next_5y
+          + p3 * 0) / life;
+        effectiveToll = tollPerKm * (1 - waiverAvg);
       }
 
       const opexPerKm = fuelPerKm + maintPerKm + effectiveToll;
