@@ -61,7 +61,7 @@ function DashboardContent() {
                 <StockChart years={simResult.years} />
                 <EmissionsChart years={simResult.years} />
                 <ZETPenetrationChart years={simResult.years} policy={config.policy} />
-                <TCOParityChart scenarioName={scenarioName} />
+                <TCOParityChart scenarioName={activeScenario} />
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
