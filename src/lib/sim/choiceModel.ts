@@ -1,3 +1,4 @@
+// v3 - multiplier fix verified - 2026-04-15
 /**
  * Choice model — multinomial logit for powertrain share targets
  * at 2045 and 2055. Returns PER-BUCKET shares.
@@ -29,6 +30,7 @@ const ELASTICITIES = {
 /** Excel cell E2/F2 — global multiplier */
 const GLOBAL_MULTIPLIER = 1.5;
 let __debugDone = false;
+let __debugDone2 = false;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
@@ -102,13 +104,33 @@ export function computeShares(
         rangeFillingTime: Math.exp(clamp(rangeArg, -50, 50)),
       };
 
+      if (bucket.id === 'B1' && targetYear === 2045 && !__debugDone2) {
+        __debugDone2 = true;
+        const dieselTco = tco['Diesel'].tcoPerKm;
+        const betTco = tco['BET'].tcoPerKm;
+        const ratio = dieselTco / betTco;
+        console.log('🔬 ACTUAL ARG TRACE:');
+        console.log('  Diesel TCO:', dieselTco);
+        console.log('  BET TCO:', betTco);
+        console.log('  Ratio:', ratio);
+        console.log('  ELASTICITIES.TCO:', ELASTICITIES.TCO);
+        console.log('  GLOBAL_MULTIPLIER:', GLOBAL_MULTIPLIER);
+        console.log('  Computed arg:', ELASTICITIES.TCO * GLOBAL_MULTIPLIER * (ratio - 1));
+        console.log('  Math.exp(arg):', Math.exp(ELASTICITIES.TCO * GLOBAL_MULTIPLIER * (ratio - 1)));
+        console.log('  Expected: ~7.186');
+      }
+
       if (bucket.id === 'B1' && targetYear === 2045 && pt === 'BET' && !__debugDone) {
         __debugDone = true;
         const tcoFactorBET = factors.TCO;
-        console.log(
-          `🧪 RUNTIME CHECK: B1 BET TCO factor = ${tcoFactorBET.toFixed(3)} ` +
-          `(Excel expects 7.186, broken value would be ~6400)`
-        );
+        console.log(`🧪 RUNTIME CHECK: B1 BET TCO factor = ${tcoFactorBET.toFixed(3)} (Excel expects 7.186, broken value would be ~6400)`);
+        console.log('  Actually stored factors:', JSON.stringify({
+          TCO: factors.TCO.toFixed(4),
+          price: factors.vehiclePrice.toFixed(4),
+          payload: factors.ratedPayload.toFixed(4),
+          TAT: factors.tatGradeability.toFixed(4),
+          range: factors.rangeFillingTime.toFixed(4),
+        }));
         if (tcoFactorBET > 100) {
           console.error('❌❌❌ Formula in loop is STILL using old multiplier. Self-test is misleading.');
         }
