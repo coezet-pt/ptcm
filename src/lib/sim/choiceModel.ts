@@ -30,6 +30,7 @@ const ELASTICITIES = {
 /** Excel cell E2/F2 — global multiplier */
 const GLOBAL_MULTIPLIER = 1.5;
 let __debugDone = false;
+let __debugDone2 = false;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
