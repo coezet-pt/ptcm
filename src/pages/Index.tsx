@@ -11,7 +11,7 @@ import ShareChart from '@/components/charts/ShareChart';
 import StockChart from '@/components/charts/StockChart';
 import EmissionsChart from '@/components/charts/EmissionsChart';
 import ZETPenetrationChart from '@/components/charts/ZETPenetrationChart';
-import TCOParityChart from '@/components/charts/TCOParityChart';
+
 
 function DashboardContent() {
   const { config, activeScenario } = useScenario();
@@ -61,7 +61,7 @@ function DashboardContent() {
                 <StockChart years={simResult.years} />
                 <EmissionsChart years={simResult.years} />
                 <ZETPenetrationChart years={simResult.years} policy={config.policy} />
-                <TCOParityChart scenarioName={activeScenario} />
+                
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
