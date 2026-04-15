@@ -47,29 +47,24 @@ function DashboardContent() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-          <aside className="space-y-6 lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto lg:pr-2">
-            <InputPanel />
-          </aside>
+      <main className="mx-auto max-w-7xl px-4 py-6 space-y-6">
+        <InputPanel />
 
-          <section className="space-y-6">
-            {simResult ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <AnnualSalesChart years={simResult.years} />
-                <ShareChart years={simResult.years} />
-                <StockChart years={simResult.years} />
-                <EmissionsChart years={simResult.years} />
-                <ZETPenetrationChart years={simResult.years} policy={config.policy} />
-                
-              </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
-                <p className="text-muted-foreground text-sm">Running simulation…</p>
-              </div>
-            )}
-          </section>
-        </div>
+        <section>
+          {simResult ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <AnnualSalesChart years={simResult.years} />
+              <ShareChart years={simResult.years} />
+              <StockChart years={simResult.years} />
+              <EmissionsChart years={simResult.years} />
+              <ZETPenetrationChart years={simResult.years} policy={config.policy} />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
+              <p className="text-muted-foreground text-sm">Running simulation…</p>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

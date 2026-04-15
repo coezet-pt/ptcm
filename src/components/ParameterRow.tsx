@@ -40,7 +40,7 @@ export default function ParameterRow({ paramKey }: Props) {
       <td className="py-2 px-2">
         <Input
           type="number"
-          className="h-8 w-24 text-right font-mono text-sm"
+          className="h-8 w-24 text-right font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           value={param.baseValue}
           step={isGrowthRate ? 0.01 : 1}
           onChange={e => updateParameter(paramKey, 'baseValue', Number(e.target.value))}
@@ -50,7 +50,7 @@ export default function ParameterRow({ paramKey }: Props) {
         <td key={dk} className="py-2 px-2">
           <Input
             type="number"
-            className="h-8 w-20 text-right font-mono text-sm"
+            className="h-8 w-20 text-right font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             value={param[dk]}
             step={0.005}
             onChange={e => updateParameter(paramKey, dk, Number(e.target.value))}
