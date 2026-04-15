@@ -271,7 +271,7 @@ export function computeTCO(
   }
 
   // DEBUG — detailed B1 2045 breakdown
-  if (typeof window !== 'undefined' && (window as any).__SIM_DEBUG__ && targetYear === 2045) {
+  if (typeof window !== 'undefined' && targetYear === 2045) {
     const b1 = result['B1'];
     if (b1) {
       console.group('🔬 TCO TRACE — B1 2045 (Excel ref: Diesel=56.94, BET=49.68)');
