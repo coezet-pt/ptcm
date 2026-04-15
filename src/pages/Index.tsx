@@ -1,16 +1,51 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { ScenarioProvider } from '@/contexts/ScenarioContext';
+import ScenarioPicker from '@/components/ScenarioPicker';
+import InputPanel from '@/components/InputPanel';
+import { Truck } from 'lucide-react';
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+export default function Index() {
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <ScenarioProvider>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-md">
+          <div className="mx-auto max-w-7xl flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Truck className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold leading-tight tracking-tight">
+                  PTCM Dashboard
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  India Heavy Truck Fleet Transition 2025–2055
+                </p>
+              </div>
+            </div>
+            <ScenarioPicker />
+          </div>
+        </header>
+
+        {/* Main content */}
+        <main className="mx-auto max-w-7xl px-4 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+            {/* Left: Input Panel */}
+            <aside className="space-y-6 lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto lg:pr-2">
+              <InputPanel />
+            </aside>
+
+            {/* Right: Charts placeholder */}
+            <section className="space-y-6">
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
+                <p className="text-muted-foreground text-sm">
+                  Charts will appear here after Phase 5
+                </p>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </ScenarioProvider>
   );
-};
-
-const Index = PlaceholderIndex;
-
-export default Index;
+}
