@@ -28,6 +28,7 @@ const ELASTICITIES = {
 
 /** Excel cell E2/F2 — global multiplier */
 const GLOBAL_MULTIPLIER = 1.5;
+let __debugDone = false;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
@@ -93,11 +94,33 @@ export function computeShares(
         : POWERTRAIN_RATINGS.rangeFillingTime[pt];
       const rangeArg = ELASTICITIES.rangeFillingTime * GLOBAL_MULTIPLIER * (dieselRange / rangeRating - 1);
 
-      const score = Math.exp(clamp(tcoArg, -50, 50))
-        + Math.exp(clamp(priceArg, -50, 50))
-        + Math.exp(clamp(payloadArg, -50, 50))
-        + Math.exp(clamp(tatArg, -50, 50))
-        + Math.exp(clamp(rangeArg, -50, 50));
+      const factors = {
+        [pt]: {
+          TCO: Math.exp(clamp(tcoArg, -50, 50)),
+          vehiclePrice: Math.exp(clamp(priceArg, -50, 50)),
+          ratedPayload: Math.exp(clamp(payloadArg, -50, 50)),
+          tatGradeability: Math.exp(clamp(tatArg, -50, 50)),
+          rangeFillingTime: Math.exp(clamp(rangeArg, -50, 50)),
+        },
+      };
+
+      if (bucket.id === 'B1' && targetYear === 2045 && pt === 'BET' && !__debugDone) {
+        __debugDone = true;
+        const tcoFactorBET = factors['BET'].TCO;
+        console.log(
+          `🧪 RUNTIME CHECK: B1 BET TCO factor = ${tcoFactorBET.toFixed(3)} ` +
+          `(Excel expects 7.186, broken value would be ~6400)`
+        );
+        if (tcoFactorBET > 100) {
+          console.error('❌❌❌ Formula in loop is STILL using old multiplier. Self-test is misleading.');
+        }
+      }
+
+      const score = factors[pt].TCO
+        + factors[pt].vehiclePrice
+        + factors[pt].ratedPayload
+        + factors[pt].tatGradeability
+        + factors[pt].rangeFillingTime;
 
       rawScores[pt] = score;
     }
