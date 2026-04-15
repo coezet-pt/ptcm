@@ -3,6 +3,7 @@
  * at 2045 and 2055. Returns PER-BUCKET shares [fix #3].
  */
 import type { Powertrain, Bucket, VehicleSize } from '@/lib/constants/extracted';
+import type { PolicyConfig } from '@/lib/types';
 import {
   POWERTRAINS,
   CHOICE_FACTORS,
@@ -19,6 +20,7 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
+// TODO: gvw_payload_compensation_t not yet wired — add as adjustment to (gvw-ulw) in payload factor
 function payloadRatio(bucket: Bucket, pt: Powertrain): number {
   // Simplified: diesel payload = gvw - ulw. Others have weight penalty for tanks/batteries.
   const dieselPayload = bucket.gvw - bucket.ulw;
@@ -39,6 +41,7 @@ export function computeShares(
   tcoResults: BucketTCOMap,
   buckets: Bucket[],
   targetYear: number,
+  policy?: PolicyConfig,
 ): BucketShares {
   const result: BucketShares = {};
 
@@ -75,7 +78,10 @@ export function computeShares(
       const tatArg = CHOICE_FACTORS.tatGradeability.elasticity * CHOICE_FACTORS.tatGradeability.weighting / CHOICE_WEIGHT_DENOMINATOR
         * (dieselTAT / tatRating - 1);
 
-      const rangeRating = POWERTRAIN_RATINGS.rangeFillingTime[pt];
+      // When range concern is removed after 2035, all powertrains score equally on range
+      const rangeRating = (policy?.range_filling_concern_after_2035 === false && targetYear >= 2035)
+        ? 1.0
+        : POWERTRAIN_RATINGS.rangeFillingTime[pt];
       const rangeArg = CHOICE_FACTORS.rangeFillingTime.elasticity * CHOICE_FACTORS.rangeFillingTime.weighting / CHOICE_WEIGHT_DENOMINATOR
         * (dieselRange / rangeRating - 1);
 

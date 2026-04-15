@@ -31,6 +31,7 @@ function gompertzCurve(
   inflectionYear: number,
   W: number,    // pilot share at start
   AB: number,   // 2055 target share from choice model
+  maturityYear?: number, // if set, warn when share(maturityYear) < 0.5*AB
 ): number[] {
   const shares = new Array(YEAR_COUNT).fill(0);
   if (AB <= 0 || startYear > END_YEAR) return shares;
@@ -59,6 +60,19 @@ function gompertzCurve(
     }
     const t = year - startYear;
     shares[i] = a_final * Math.exp(-b * Math.exp(-c * t)) / Math.exp(-b * Math.exp(-c * endDelta));
+  }
+
+  // Option B: maturity year informational warning
+  if (maturityYear && maturityYear >= startYear && maturityYear <= END_YEAR) {
+    const matIdx = maturityYear - START_YEAR;
+    const matShare = shares[matIdx] ?? 0;
+    if (matShare < 0.5 * AB) {
+      console.warn(
+        `[PTTM] Gompertz: share at maturity year ${maturityYear} is ${(matShare * 100).toFixed(2)}%, ` +
+        `below 50% of saturation (${(AB * 50).toFixed(2)}%). ` +
+        `Consider raising 2055 target shares or adjusting inflection year.`
+      );
+    }
   }
 
   return shares;
@@ -129,6 +143,12 @@ export function computePTTM(
     'H2-FCET': policy.fcet_inflection_year,
   };
 
+  const maturityYears: Record<string, number> = {
+    'BET': policy.bet_maturity_year,
+    'H2-ICE': policy.h2ice_maturity_year,
+    'H2-FCET': policy.fcet_maturity_year,
+  };
+
   // Run per bucket, accumulate weighted shares
   for (const bucket of buckets) {
     const size = bucket.size as VehicleSize;
@@ -140,7 +160,7 @@ export function computePTTM(
       const W = PTTM_PILOT_SHARE[pt as keyof typeof PTTM_PILOT_SHARE] ?? 0.0001;
       const AB = shares2055[bucket.id]?.[pt] ?? 0;
       const inflYear = inflectionYears[pt] ?? 2038;
-      const curve = gompertzCurve(startYear, inflYear, W, AB);
+      const curve = gompertzCurve(startYear, inflYear, W, AB, maturityYears[pt]);
 
       for (let i = 0; i < YEAR_COUNT; i++) {
         annual[i].share[pt] += curve[i] * weight;
