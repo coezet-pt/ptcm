@@ -23,6 +23,12 @@ export interface TCOResult {
   tcoPerKm: number;
   vehiclePrice: number;
   totalCost: number;
+  capexPerKm: number;
+  opexPerKm: number;
+  fuelCostPerKm: number;
+  maintPerKm: number;
+  tollPerKm: number;
+  resalePct: number;
 }
 
 export type BucketTCOMap = Record<string, Record<Powertrain, TCOResult>>;
@@ -247,20 +253,36 @@ export function computeTCO(
       const totalOpex = opexPerKm * bucket.annualKm * FINANCE.useful_life_years;
       const totalCost = capex + totalOpex;
       const tcoPerKm = totalCost / (bucket.annualKm * FINANCE.useful_life_years);
+      const capexPerKm = capex / (bucket.annualKm * FINANCE.useful_life_years);
 
-      ptResults[pt] = { tcoPerKm, vehiclePrice: price, totalCost };
+      ptResults[pt] = {
+        tcoPerKm, vehiclePrice: price, totalCost,
+        capexPerKm, opexPerKm, fuelCostPerKm: fuelPerKm,
+        maintPerKm: maintPerKm, tollPerKm: effectiveToll, resalePct,
+      };
     }
     result[bucket.id] = ptResults;
   }
 
-  // DEBUG
-  if (typeof window !== 'undefined' && (window as any).__SIM_DEBUG__) {
+  // DEBUG — detailed B1 2045 breakdown
+  if (typeof window !== 'undefined' && (window as any).__SIM_DEBUG__ && targetYear === 2045) {
     const b1 = result['B1'];
     if (b1) {
-      console.log(`[TCO DEBUG] Year=${targetYear} Bucket=B1`);
+      console.group('🔬 TCO TRACE — B1 2045 (Excel ref: Diesel=56.94, BET=49.68)');
       for (const pt of POWERTRAINS) {
-        console.log(`  ${pt}: price=₹${Math.round(b1[pt].vehiclePrice).toLocaleString()} tco/km=₹${b1[pt].tcoPerKm.toFixed(2)}`);
+        const r = b1[pt];
+        console.log(pt, {
+          vehiclePrice: Math.round(r.vehiclePrice),
+          tcoPerKm: r.tcoPerKm.toFixed(2),
+          capexPerKm: r.capexPerKm.toFixed(2),
+          opexPerKm: r.opexPerKm.toFixed(2),
+          fuelCostPerKm: r.fuelCostPerKm.toFixed(4),
+          maintPerKm: r.maintPerKm.toFixed(4),
+          tollPerKm: r.tollPerKm.toFixed(4),
+          resalePct: r.resalePct,
+        });
       }
+      console.groupEnd();
     }
   }
 
