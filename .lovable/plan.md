@@ -1,30 +1,62 @@
 
 
-# Fix PTTM Gompertz & Weibull Formulas
+# Fix Choice Model — 3 Bugs in `choiceModel.ts`
 
-## Summary
-
-Replace the simplified Gompertz and Weibull functions in `pttm.ts` with the Excel-accurate versions that include quadratic correction (Gompertz) and 2025 anchor injection with phase-out (Weibull). Remove maturity-year clamping. Add verification logging.
+## What's wrong
+The choice model gives BET ~100% because: (A) the elasticity formula misuses `weighting` as a multiplier instead of using `elasticity * 1.5` directly, (B) payload and TAT ratios are inverted (diesel/pt instead of pt/diesel).
 
 ## Changes
 
-### 1. `src/lib/sim/pttm.ts` — Full rewrite of curve functions
+### `src/lib/sim/choiceModel.ts`
 
-**Gompertz (`gompertzShare`):** New point-wise function taking `year, startYear, inflectionYear, pilotShare, share2045, share2055`. Computes main Gompertz normalized to hit AB at 2055, then adds quadratic correction term `correctionCoef * (year - inflection) * (2055 - year)` for years between inflection and 2055, forcing curve through Z at 2045.
+1. **Remove imports** of `CHOICE_FACTORS` and `CHOICE_WEIGHT_DENOMINATOR` — they encode wrong semantics.
 
-**Weibull (`weibullShare`):** New point-wise function taking `year, startYear, peakYear, alpha, peakShare2045, units2025, tiv2025`. Normalizes kernel to hit peak at 2045, injects 2025 anchor share with quadratic decay over 20 years, applies linear phase-out from 2045→2055.
+2. **Define local constants:**
+```ts
+const ELASTICITIES = {
+  TCO: 9.0, vehiclePrice: 8.83, ratedPayload: 7.17,
+  tatGradeability: 5.5, rangeFillingTime: 7.5,
+};
+const GLOBAL_MULTIPLIER = 1.5;
+```
 
-**Remove:** Delete `maturityYears` map, remove `maturityYear` parameter from Gompertz calls, delete the warning block.
+3. **Fix 5 factor arg computations** (lines 68-86) — each becomes `ELASTICITIES[factor] * GLOBAL_MULTIPLIER * (ratio - 1)` with correct ratio direction:
+   - TCO: `diesel / pt` (lower TCO better)
+   - vehiclePrice: `diesel / pt` (lower price better)
+   - ratedPayload: `pt / diesel` (higher payload better) — **FLIPPED**
+   - tatGradeability: `pt / diesel` (higher rating better) — **FLIPPED**
+   - rangeFillingTime: `diesel / pt` (lower penalty better)
 
-**Update `computePTTM`:** Change per-bucket loops to call the new point-wise functions year-by-year. Gompertz PTs now also need `shares2045` (for Z target). Weibull PTs need `units2025` and `tiv2025` constants.
+4. **Add self-test at module bottom:**
+```ts
+if (typeof window !== 'undefined') {
+  const testBET_TCO = Math.exp(9.0 * 1.5 * (56.94 / 49.68 - 1));
+  const expected = 7.186;
+  if (Math.abs(testBET_TCO - expected) > 0.05)
+    console.error(`❌ Choice model formula BROKEN: expected ${expected}, got ${testBET_TCO.toFixed(3)}`);
+  else
+    console.log('✅ Choice model formula verified against Excel B1 BET TCO');
+}
+```
 
-### 2. `src/hooks/useSimulation.ts` — Add verification block
+5. **Update debug block** (lines 107-148) to use new constants instead of `CHOICE_FACTORS`/`CHOICE_WEIGHT_DENOMINATOR`.
 
-Add `__SIM_DEBUG__` gated verification after the diagnostic dump. Accesses `result.years[idx].shareByPT` for years 2030/2045/2055 and compares against expected BAU values, logging pass/fail per powertrain.
+### `src/hooks/useSimulation.ts`
+
+Add choice model verification inside the existing `__SIM_DEBUG__` block (after the PTTM verification):
+```ts
+console.group('🎯 Choice model verification — B1 2045');
+const expectedB1 = {
+  Diesel: 0.1652, CNG: 0.1060, LNG: 0.0951,
+  BET: 0.3640, 'H2-ICE': 0.1026, 'H2-FCET': 0.1671,
+};
+// Log actual vs expected for each PT in shares2045.B1
+console.groupEnd();
+```
 
 ### Files touched
-- `src/lib/sim/pttm.ts` — rewrite Gompertz/Weibull, remove maturity clamping
-- `src/hooks/useSimulation.ts` — add verification block
+- `src/lib/sim/choiceModel.ts` — fix formula, ratio directions, add self-test
+- `src/hooks/useSimulation.ts` — add B1 2045 verification block
 
-No changes to `choiceModel.ts`, `tco.ts`, or `stockEmissions.ts`.
+No changes to `pttm.ts`, `tco.ts`, `stockEmissions.ts`, or `extracted.ts`.
 
