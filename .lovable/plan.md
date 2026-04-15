@@ -1,158 +1,121 @@
+# Phase 4 — Simulation Engine Implementation
 
+All 6 bug fixes from the user are incorporated. Seven files to create.
 
-# PTCM Dashboard — Revised Implementation Plan
+## File 1: `src/lib/sim/timeSeries.ts`
 
-## Overview
-Single-page React dashboard simulating India's heavy truck fleet transition across 6 powertrains (2025-2055). All constants come from the uploaded `extracted.ts` file. Simulation runs client-side. Scenarios stored in Supabase.
+Build year-by-year arrays (index 0=2025, index 30=2055) for all 15 parameters using compound growth per period. Export `buildTimeSeries(params) → Record<ParameterKey, number[]>` and `getValueAtYear(series, year) → number`.
 
----
+For the three growth-rate keys (`diesel_vehicle_growth`, `engine_trans_growth`, `e_powertrain_growth`), the baseValue is 0 — store cumulative multiplier starting at 1.0, compounding the delta each year.
 
-## Execution Phases
+## File 2: `src/lib/sim/tco.ts`
 
-### Phase 1 — Constants & Foundation
-- Copy `extracted.ts` verbatim to `src/lib/constants/extracted.ts`
-- Install dependencies: `recharts`, `html-to-image`, `papaparse`
-- Create shared types in `src/lib/types.ts` (ScenarioConfig, SimulationResult, etc.)
-- Create powertrain color map and utility exports in `src/lib/constants/`
+**Vehicle prices per bucket × powertrain × year** using exact [A6] formulas:
 
-### Phase 2 — Database
-- Create `scenarios` table: `id (uuid pk)`, `name (text)`, `description (text)`, `config (jsonb)`, `created_at (timestamptz)`
-- RLS: public read, no write
-- Seed 4 rows with `name` = BAU/BWS-1/BWS-2/BEST, `config` = `{}` (placeholder — user will provide full configs later)
-- Build `ScenarioContext.tsx` — fetches all 4 on mount, caches in React context
-- Wire up Supabase client
+- Diesel: `diesel_total_2025 * 1.03^(y-2025) + (y>=2030 ? 400000 : 0)`
+- CNG: diesel_price + per-vehicle tank cost (₹150k small ≤28T / ₹250k large, 1% YoY) — **NOT** from `lng_tank_cost_per_kg` time series [fix #4]
+- LNG: diesel_price + lng_tank_kg × lng_tank_cost_per_kg[y] + valves (100k base, 1% YoY)
+- BET: engine_trans × growth + e_powertrain[y] + battery_kWh × battery_cost[y], then × (1+OEM_MARGIN[y]), then − demand incentive
+- H2-ICE: diesel_price + h2_tank_kg × h2_tank_cost[y]
+- H2-FCET: engine_trans × growth + e_powertrain[y] + fc_kW × fc_cost[y] + battery_kWh × battery_cost[y] + h2_tank × h2_tank_cost[y], then OEM margin, then incentive
 
-### Phase 3 — Input Panel UI
-Two distinct sections per amendment [A3]:
+**7-year TCO** per [A7]:
 
-**Section 1: Cost Trajectories** — 15 parameter rows from `BAU_PARAMETERS`, each with:
-- Parameter name + tooltip
-- Base value (2025) input
-- 4 delta-% inputs (2026-30, 2031-40, 2041-50, 2051-55)
+- Resale = price × tier% from `RESALE_VALUES` + `BUCKET_RESALE_PROFILE` (tier by purchase year: ≤2035→0, 2036-2045→1, >2045→2)
+- Interest = price × rate × tenure / 2
+- Insurance = price × 0.02 × 7
+- Fuel cost/km by powertrain (H2 uses blended green/grey per `h2_source_mix` policy)
+- Toll = ₹2.5/km × 1.025^(y-2025) with `// TODO: parameterise`
+- Toll waiver for BET/FCET; electricity subsidy for BET only
+- TCO/km = (capex + opex × annual_km × 7) / (annual_km × 7)
 
-**Section 2: Policy Levers** — 7 controls from `BAU_POLICY`, NO delta columns:
-- BET/FCET demand incentive (number inputs, Rs/kWh)
-- ZET interest rate (slider 8-15%)
-- Electricity subsidy (number input)
-- Toll waiver first 5y / next 5y (two number inputs)
-- H2 source mix (radio: green_only / blend_2046_green / cheapest)
-- BET inflection year (slider 2030-2042)
+Export: `computeTCO(timeSeries, policy, buckets, targetYear) → Record<bucketId, Record<Powertrain, { tcoPerKm, vehiclePrice }>>`
 
-**ScenarioPicker**: dropdown BAU/BWS-1/BWS-2/BEST/Custom. Selecting a preset loads its config. Any edit auto-promotes to "Custom". "Reset to BAU" button.
+## File 3: `src/lib/sim/choiceModel.ts`
 
-Components: `ScenarioPicker.tsx`, `InputPanel.tsx`, `ParameterRow.tsx`, `PolicyLevers.tsx`
+Per bucket × target year, compute 5 factors per powertrain:
 
-### Phase 4 — Simulation Engine
-Five modules in `src/lib/sim/`:
+- `arg = elasticity × weighting / 1.5 × (diesel_value/pt_value - 1)`
+- `factor = Math.exp(clamp(arg, -50, 50))` [A5a]
+- TCO and price factors from tco output; payload uses `(gvw-ulw)` ratios; TAT and range from `POWERTRAIN_RATINGS`
 
-**timeSeries.ts** — For each of 15 cost parameters, build year-by-year array (2025-2055) using compound growth per period.
+Normalize to shares. Zero out shares before `START_OF_SUPPLY[bucket.size][pt]`.
 
-**tco.ts** — Per amendment [A6] and [A7]:
-- Vehicle price per powertrain per year using exact formulas (diesel 3% growth + BS-VII bump, BET = glider + battery + e-powertrain with OEM margin, etc.)
-- 7-year TCO = capex (price - resale + interest + insurance) + opex (fuel + maintenance + toll - subsidies) over annual_km * 7
-- Toll: flat Rs 2.5/km in 2025, 2.5% YoY growth (hardcoded with TODO comment)
-- Compute for target years 2045 and 2055
+**Return per-bucket shares** — do NOT aggregate [fix #3]. Export: `computeShares(...) → { shares2045: Record<bucketId, Record<Powertrain, number>>, shares2055: ... }`
 
-**choiceModel.ts** — Per amendment [A5]:
-- 5 factors (TCO, price, payload, TAT, range) with elasticities from `CHOICE_FACTORS`
-- `factor = EXP(clamp(elasticity * weighting / 1.5 * (base/value - 1), -50, 50))`
-- Sum factors per PT, normalize to shares
-- Apply start-of-supply readiness scaling
+## File 4: `src/lib/sim/pttm.ts`
 
-**pttm.ts** — Per amendment [A5]:
-- Gompertz for BET/H2-ICE/H2-FCET with guarded b and c parameters
-- Weibull for CNG/LNG (alpha=5, peak=2045)
-- After all shares computed: if sum > 1, scale non-diesel proportionally so diesel >= 0
-- Output: annual sales by PT = share * TIV
+Run Gompertz/Weibull **per bucket**, aggregate final sales [fix #3].
 
-**stockEmissions.ts**:
-- Stock evolution: stock[y] = stock[y-1] + sales[y] - retirements[y] (20-year scrappage)
-- Pre-2001 backlog: 125k/yr diesel scrappage until 2040
-- Emissions: stock * annual_km * emission_factor / efficiency / 1e9 (Mt CO2)
+**Gompertz (BET, H2-ICE, H2-FCET)** — per bucket:
 
-### Phase 4.5 — Sanity Check Harness (Amendment [A2])
-- `src/lib/sim/sanityCheck.ts` — validates SimulationResult against `BAU_BASELINE_CHECKS`
-- Returns `{name, passed, expected, actual, message}[]`
-- "Model Health" badge in dashboard header — green (all pass) / yellow (failures) with expandable failure panel
+- startYear = `START_OF_SUPPLY[bucket.size][pt]`
+- W = `PTTM_PILOT_SHARE[pt]`
+- AB = shares2055 from choiceModel (per bucket)
+- Exact order of operations [fix #2]:
+  1. `a_initial = AB`
+  2. `b = ln(max(a_initial, W * 1.01) / W)`
+  3. `c = -(1/(inflectionYear - startYear)) × ln(ln(max(a_initial, 0.1001) / 0.1) / b)`
+  4. `a_final = AB / exp(-b × exp(-c × (2055 - startYear)))`
+  5. `share(y) = a_final × exp(-b × exp(-c × (y - startYear))) / exp(-b × exp(-c × (2055 - startYear)))`
 
-### Phase 5 — Charts
-Six charts in `src/components/charts/`, each wrapped in `ChartCard.tsx` with PNG download (html-to-image) and "View data" toggle with CSV export (papaparse):
+**Weibull (CNG, LNG)** — per bucket:
 
-- **A** Annual Sales by Powertrain — stacked area
-- **B** Powertrain Share % — stacked area to 100%
-- **C** Cumulative Stock — stacked area
-- **D** CO2 Emissions — stacked area + diesel-counterfactual overlay line
-- **E** ZET Penetration — line chart with inflection year markers
-- **F** TCO Parity Year — horizontal bar from `TCO_PARITY_YEARS` constant (per [A4]); Custom scenario falls back to BAU with disclaimer
+- peakShare (W) = `shares2045[bucket][CNG/LNG]` from choiceModel [fix #1]
+- α=5, peakYear=2045, startYear from `START_OF_SUPPLY`
+- Add `console.warn` if computed 2025 share deviates >50% from historical anchor `CNG_UNITS_2025/TIV_2025`
 
-### Phase 6 — Stat Cards
-Grid of shadcn Cards:
-- Total ZET sales 2025-2055
-- Year of 50% ZET share
-- Cumulative CO2 avoided (Mt)
-- Diesel stock peak year & value
-- 2045 PT mix (mini donut)
-- 2055 PT mix (mini donut)
-- **TCO Parity Year (Avg)** per ZET powertrain, volume-weighted by tivShare2045 (amendment [A8])
+**Post-processing** [A5d]: sum all non-diesel shares per year; if >1.0, scale proportionally so diesel ≥ 0.
 
-### Phase 7 — UX Polish
-- 300ms debounced simulation with "Calculating..." indicator
-- `useMemo` with deep compare on input config
-- Responsive: mobile stacks vertically, Advanced tab behind accordion
-- All charts in `ResponsiveContainer`
+Aggregate: `sales[y][pt] = Σ_buckets(share[bucket][pt][y] × TIV[y] × bucket.tivShare2045)`. Add `OTHER_DIESEL_TIV_SHARE` to diesel.
 
----
+## File 5: `src/lib/sim/stockEmissions.ts`
 
-## File Structure
-```text
-src/
-  lib/
-    constants/
-      extracted.ts          ← uploaded file (verbatim)
-    types.ts                ← ScenarioConfig, SimulationResult interfaces
-    sim/
-      timeSeries.ts
-      tco.ts
-      choiceModel.ts
-      pttm.ts
-      stockEmissions.ts
-      sanityCheck.ts
-    exporters.ts            ← PNG + CSV utilities
-  contexts/
-    ScenarioContext.tsx
-  hooks/
-    useSimulation.ts        ← debounced runner
-  components/
-    InputPanel.tsx
-    ScenarioPicker.tsx
-    ParameterRow.tsx
-    PolicyLevers.tsx
-    BucketOverrideTable.tsx  (Advanced tab — Phase 7)
-    ChartCard.tsx
-    ModelHealthBadge.tsx
-    StatCards.tsx
-    charts/
-      AnnualSalesChart.tsx
-      ShareChart.tsx
-      StockChart.tsx
-      EmissionsChart.tsx
-      ZETPenetrationChart.tsx
-      TCOParityChart.tsx
-  pages/
-    Index.tsx               ← single dashboard page
-```
+**Stock evolution:**
+
+- diesel stock[2024] = `DIESEL_STOCK_END_2024`; others = 0
+- For y≥2025: `stock[y] = stock[y-1] + sales[y] - retirements[y]`
+- Retirements = `sales[y-20]` (from `HISTORICAL_SALES` for pre-2025)
+- Pre-2001 diesel scrappage: 125k/yr until 2040
+
+**Emissions (Mt CO₂/yr):**
+
+- Per powertrain using `EMISSION_FACTORS` and bucket-weighted efficiencies
+- Diesel counterfactual [fix #5]: `actual_total_stock[y] × diesel_emission_rate` where rate = bucket-weighted `(annualKm / dieselKMPL × 2.60)` averaged across buckets by tivShare
+
+**Summary stats:** totalZetSales, year50PctZet, cumulativeCO2Avoided, dieselStockPeakYear/Value
+
+## File 6: `src/hooks/useSimulation.ts`
+
+Wires modules: timeSeries → tco(2045,2055) → choiceModel → pttm → stockEmissions.
+
+Uses stable stringify for memo key [fix #6]: a small `stableStringify` helper that sorts object keys recursively before `JSON.stringify`. No external dep needed — ~15 lines of code.
+
+Returns `SimulationResult`. 300ms debounce via `setTimeout`/`clearTimeout` pattern.
+
+## File 7: Minor update to `src/pages/Index.tsx`
+
+Call `useSimulation(config)` and `console.log('SimulationResult:', result)` for verification. No UI changes yet.
+
+Approved. One small ask: in each of the 5 sim modules, add a `// DEBUG:` block at the bottom of every exported function that logs key intermediate values when `window.__SIM_DEBUG__ === true`. Specifically:
+
+- `tco.ts`: log vehicle prices and TCO/km for B1 (Market Load 19T) at 2045 for all 6 powertrains
+- `choiceModel.ts`: log raw factors and final shares for B1 at 2045
+- `pttm.ts`: log Gompertz parameters (W, AB, a_initial, b, c, a_final) for BET in B1
+- `stockEmissions.ts`: log year-2030 and year-2045 stock totals
+
+This lets me toggle deep diagnostics from the browser console without UI changes when Model Health fails. Default off so production output stays clean.
 
 ---
 
-## Implementation Order
-1. Drop `extracted.ts`, install deps, create types
-2. Supabase table + ScenarioContext
-3. InputPanel UI (Cost Trajectories + Policy Levers + ScenarioPicker)
-4. Simulation engine (5 modules with guards)
-5. Sanity check harness + Model Health badge
-6. Charts (6 charts with export)
-7. Stat cards
-8. Polish (debounce, responsive, Advanced tab)
+## Summary of all 6 fixes applied
 
-Each phase will be implemented as a separate batch. Starting with phases 1-3 upon approval.
 
+| #   | Fix                                                               | Module             |
+| --- | ----------------------------------------------------------------- | ------------------ |
+| 1   | Weibull W = shares2045 from choiceModel, not CNG_UNITS/TIV        | pttm.ts            |
+| 2   | Gompertz: a_initial→b→c→a_final order                             | pttm.ts            |
+| 3   | Per-bucket shares in choiceModel, aggregate in pttm               | choiceModel + pttm |
+| 4   | CNG tank cost hardcoded per-vehicle, not lng time series          | tco.ts             |
+| 5   | Diesel counterfactual = total stock × bucket-weighted diesel rate | stockEmissions.ts  |
+| 6   | Stable stringify for memo key                                     | useSimulation.ts   |
