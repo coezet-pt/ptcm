@@ -1,3 +1,4 @@
+// v3 - multiplier fix verified - 2026-04-15
 /**
  * Choice model — multinomial logit for powertrain share targets
  * at 2045 and 2055. Returns PER-BUCKET shares.
