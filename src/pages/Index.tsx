@@ -1,12 +1,20 @@
 import { ScenarioProvider, useScenario } from '@/contexts/ScenarioContext';
 import ScenarioPicker from '@/components/ScenarioPicker';
 import InputPanel from '@/components/InputPanel';
+import ModelHealthBadge from '@/components/ModelHealthBadge';
 import { useSimulation } from '@/hooks/useSimulation';
 import { Truck } from 'lucide-react';
 import { useEffect } from 'react';
 
+import AnnualSalesChart from '@/components/charts/AnnualSalesChart';
+import ShareChart from '@/components/charts/ShareChart';
+import StockChart from '@/components/charts/StockChart';
+import EmissionsChart from '@/components/charts/EmissionsChart';
+import ZETPenetrationChart from '@/components/charts/ZETPenetrationChart';
+import TCOParityChart from '@/components/charts/TCOParityChart';
+
 function DashboardContent() {
-  const { config } = useScenario();
+  const { config, scenarioName } = useScenario();
   const simResult = useSimulation(config);
 
   useEffect(() => {
@@ -32,7 +40,10 @@ function DashboardContent() {
               </p>
             </div>
           </div>
-          <ScenarioPicker />
+          <div className="flex items-center gap-3 relative">
+            <ModelHealthBadge simResult={simResult} />
+            <ScenarioPicker />
+          </div>
         </div>
       </header>
 
@@ -43,13 +54,20 @@ function DashboardContent() {
           </aside>
 
           <section className="space-y-6">
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
-              <p className="text-muted-foreground text-sm">
-                {simResult
-                  ? `Simulation ready — ${simResult.years.length} years, ZET sales: ${simResult.totalZetSales.toLocaleString()}`
-                  : 'Running simulation…'}
-              </p>
-            </div>
+            {simResult ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <AnnualSalesChart years={simResult.years} />
+                <ShareChart years={simResult.years} />
+                <StockChart years={simResult.years} />
+                <EmissionsChart years={simResult.years} />
+                <ZETPenetrationChart years={simResult.years} policy={config.policy} />
+                <TCOParityChart scenarioName={scenarioName} />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center min-h-[400px]">
+                <p className="text-muted-foreground text-sm">Running simulation…</p>
+              </div>
+            )}
           </section>
         </div>
       </main>
