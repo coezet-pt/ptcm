@@ -1,54 +1,94 @@
+# Phase 4.5+5 Completion: Scenario Configs, Type Updates, Debug Logging, and Build Fix
 
+## Summary
 
-# Phase 4.5 + 5: Sanity Checks, Model Health Badge, and Charts
+Four things to do: (1) fix the recharts v3 TS build error in `chart.tsx`, (2) expand `PolicyConfig` with 17 new fields, (3) create `src/lib/constants/scenarios.ts` with all 4 scenario configs and seed them to Supabase, (4) add enhanced CNG/LNG debug logging to `choiceModel.ts` and `pttm.ts`.
 
-## Files to Create (11)
+## 1. Fix Build Error — `src/components/ui/chart.tsx`
 
-### 1. `src/lib/sim/sanityCheck.ts`
-- Takes `SimulationResult`, returns `SanityCheckResult[]`
-- 12 checks: total_sales at 2025/2045/2055 (within 2%), zet_share ranges at 2045/2055, diesel_2025 units, CNG share at 2030 (1-15%), 2045 (>=2%), 2055 (<=0.5%), LNG share at 2030 (>=0.5%), 2045 (>=1.5%), 2055 (<=0.5%)
-- Uses `BAU_BASELINE_CHECKS` from extracted.ts plus new CNG/LNG thresholds
-- Each check returns `{ name, passed, expected, actual, message }`
+The recharts v3 (`^3.8.1`) removed `payload` and `label` from the Tooltip content props type. Fix by adding explicit type casting/extension at the component props level:
 
-### 2. `src/components/ModelHealthBadge.tsx`
-- Badge next to ScenarioPicker in header
-- Green/yellow/red based on pass count
-- Click expands Collapsible panel listing each check with pass/fail icon and details
-- Receives `SimulationResult` as prop
+- Line 95: Change the intersection type to add `payload?: any[]; label?: string;` to the props
+- Line 233: Change `Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign">` to inline `{ payload?: any[]; verticalAlign?: string }`
 
-### 3. `src/components/ChartCard.tsx`
-- Wrapper: title, description, ref-based PNG export via `toPng`, CSV export via `papaparse.unparse`
-- "Download PNG" and "View Data" toggle buttons in card header
-- Data table shown conditionally with CSV download button
+This is a known recharts v3 breaking change in the shadcn chart component.
 
-### 4. `src/lib/exporters.ts`
-- `exportPNG(ref, filename)` — calls `toPng`, triggers download
-- `exportCSV(data, columns, filename)` — calls `papaparse.unparse`, triggers download
+## 2. Expand `PolicyConfig` — `src/lib/types.ts`
 
-### 5-10. Six chart components in `src/components/charts/`
+Add these 17 fields to `PolicyConfig`:
 
-All use `POWERTRAIN_COLORS` from extracted.ts. All wrapped in `ChartCard`. All use Recharts `ResponsiveContainer`.
+```
+bet_incentive_phase1_end_year: number;
+bet_demand_incentive_phase2_per_kwh: number;
+bet_incentive_phase2_end_year: number;
+fcet_incentive_phase1_end_year: number;
+fcet_demand_incentive_phase2_per_kwh: number;
+fcet_incentive_phase2_end_year: number;
+electricity_subsidy_end_year: number;
+toll_waiver_first_period_years: number;
+toll_waiver_second_period_years: number;
+bet_maturity_year: number;
+h2ice_maturity_year: number;
+fcet_maturity_year: number;
+range_filling_concern_after_2035: boolean;
+gvw_payload_compensation_t: number;
+```
 
-5. **`AnnualSalesChart.tsx`** — Stacked `AreaChart` of `salesByPT` per year. Tooltip shows values.
-6. **`ShareChart.tsx`** — Stacked `AreaChart` to 100% (`stackOffset="expand"`) of `shareByPT`.
-7. **`StockChart.tsx`** — Stacked `AreaChart` of `stockByPT`.
-8. **`EmissionsChart.tsx`** — Stacked `AreaChart` of `emissionsByPT` + a `Line` overlay for `dieselCounterfactualEmissions` (dashed).
-9. **`ZETPenetrationChart.tsx`** — Single `LineChart` of `zetShare` (as %). Vertical `ReferenceLine` at each inflection year from policy config. Props: `years`, `policy`.
-10. **`TCOParityChart.tsx`** — Horizontal grouped `BarChart` from `TCO_PARITY_YEARS` constant. Shows BAU data by default; if scenario is BEST, shows BEST data. Custom shows BAU with disclaimer text.
+(h2_source_mix, diesel_price_5pct_yoy_after_2045, bet_resale_2046_plus already exist)
 
-### 11. Edit `src/pages/Index.tsx`
-- Import `ModelHealthBadge`, pass `simResult` to it, place in header next to ScenarioPicker
-- Replace placeholder `<section>` with 2x3 grid of chart components
-- Pass `simResult.years` and `config.policy` to charts
-- Grid: `grid-cols-1 lg:grid-cols-2` with 6 chart cards
+## 3. Update `BAU_POLICY` — `src/lib/constants/extracted.ts`
 
-### CNG/LNG Debug Enhancement in `src/lib/sim/choiceModel.ts`
-- Expand existing DEBUG block to also log B12 CNG/LNG shares at 2045
-- Log all 5 raw factor args for CNG in B1 to identify which factor dominates
-- This helps diagnose whether the near-zero CNG/LNG issue is in the choice model or downstream
+Add default values for all new fields to `BAU_POLICY` so BAU config remains complete:
 
-## No new dependencies needed
-recharts, html-to-image, papaparse already in package.json.
+```
+bet_incentive_phase1_end_year: 2030,
+bet_demand_incentive_phase2_per_kwh: 0,
+bet_incentive_phase2_end_year: 2035,
+fcet_incentive_phase1_end_year: 2030,
+fcet_demand_incentive_phase2_per_kwh: 0,
+fcet_incentive_phase2_end_year: 2035,
+electricity_subsidy_end_year: 2035,
+toll_waiver_first_period_years: 5,
+toll_waiver_second_period_years: 5,
+bet_maturity_year: 2035,
+h2ice_maturity_year: 2042,
+fcet_maturity_year: 2045,
+range_filling_concern_after_2035: false,
+gvw_payload_compensation_t: 0,
+```
 
-## No database changes needed
+## 4. Create `src/lib/constants/scenarios.ts`
 
+Full `ScenarioConfig` objects for BAU, BWS-1, BWS-2, BEST. Each has `parameters` (15 keys) and `policy` (all fields including new ones). BAU reuses `BAU_PARAMETERS` + extended `BAU_POLICY`. BWS-1/BWS-2/BEST have their own parameter overrides and policy configs.
+
+Since the user said they're "sending" this file but didn't attach it, I'll create the structure with BAU fully populated (from existing constants) and BWS-1/BWS-2/BEST using the existing `BEST_OVERRIDES` + `SCENARIO_INFLECTION_YEARS` + `SCENARIO_MATURITY_YEARS` to populate them as completely as possible from extracted.ts data.
+
+## 5. Seed Supabase `scenarios` table
+
+Use the Supabase insert tool to UPDATE the 4 existing scenario rows with their full `config` JSONB from the scenarios.ts objects.
+
+## 6. Update `ScenarioContext.tsx`
+
+Import scenario configs from `scenarios.ts` as fallbacks when DB rows have empty config. This ensures the app works even before DB is seeded.
+
+## 7. Enhanced Debug Logging
+
+`**choiceModel.ts**`: When `__SIM_DEBUG__`, add `console.table` for B12 CNG vs Diesel at 2045 showing TCO, price, and share. Also log all 5 factor args for CNG in B1.
+
+`**pttm.ts**`: When `__SIM_DEBUG__`, log Weibull inputs and outputs for B12 CNG: peakShare W, computed shares at 2025/2035/2045/2055, NaN/Infinity warnings.
+
+## Files Modified (7)
+
+1. `src/components/ui/chart.tsx` — fix TS errors for recharts v3
+2. `src/lib/types.ts` — expand PolicyConfig
+3. `src/lib/constants/extracted.ts` — expand BAU_POLICY defaults
+4. `src/lib/constants/scenarios.ts` — create with 4 scenario configs
+5. `src/contexts/ScenarioContext.tsx` — use scenario configs as fallbacks
+6. `src/lib/sim/choiceModel.ts` — enhanced debug logging
+7. `src/lib/sim/pttm.ts` — enhanced debug logging
+
+No database schema changes needed. Will use insert tool to update scenario config data.
+
+**why is model Model Health Checks not [assing in full**
+
+&nbsp;
