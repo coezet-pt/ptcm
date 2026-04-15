@@ -14,7 +14,7 @@ import ZETPenetrationChart from '@/components/charts/ZETPenetrationChart';
 import TCOParityChart from '@/components/charts/TCOParityChart';
 
 function DashboardContent() {
-  const { config, scenarioName } = useScenario();
+  const { config, activeScenario } = useScenario();
   const simResult = useSimulation(config);
 
   useEffect(() => {
