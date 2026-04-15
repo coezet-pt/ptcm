@@ -213,7 +213,7 @@ export function computePTTM(
     for (const pt of POWERTRAINS) {
       annual[i].sales[pt] = s[pt] * tiv;
     }
-    annual[i].sales.Diesel += OTHER_DIESEL_TIV_SHARE * tiv;
+    // Removed: was double-counting diesel (residual share already includes all diesel)
   }
 
   return annual;

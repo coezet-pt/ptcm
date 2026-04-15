@@ -114,11 +114,14 @@ function computeVehiclePrice(
       return dieselPrice + lngCapacityKg * lngTankCostPerKg + valves;
     }
     case 'BET': {
-      const engineTransGrowth = getValueAtYear(ts.engine_trans_growth, year);
+      // Excel formula: dieselBase - dieselPowertrain + ePowertrain + battery, then OEM margin, then incentive
+      const dieselBase = base.diesel_total * Math.pow(1.03, dy)
+        + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
+      const dieselPowertrain = base.engine_trans * getValueAtYear(ts.engine_trans_growth, year);
       const ePowertrain = base.e_powertrain * getValueAtYear(ts.e_powertrain_growth, year);
       const batteryCost = bucket.betBatteryKWh * getValueAtYear(ts.battery_cost_per_kwh, year);
       const oem = BET_OEM_MARGIN_BY_YEAR[Math.min(year, 2055)] ?? 0.25;
-      const raw = (base.engine_trans * engineTransGrowth) + ePowertrain + batteryCost;
+      const raw = dieselBase - dieselPowertrain + ePowertrain + batteryCost;
       const withMargin = raw * (1 + oem);
       // Phased incentive: full until phase1_end, reduced until phase2_end, zero after
       const betIncentivePerKwh = year <= policy.bet_incentive_phase1_end_year
@@ -135,13 +138,16 @@ function computeVehiclePrice(
       return dieselPrice + h2TankCost;
     }
     case 'H2-FCET': {
-      const engineTransGrowth = getValueAtYear(ts.engine_trans_growth, year);
+      // Excel formula: dieselBase - dieselPowertrain + ePowertrain + fuelCell + battery + h2Tank, then OEM margin, then incentive
+      const dieselBase = base.diesel_total * Math.pow(1.03, dy)
+        + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
+      const dieselPowertrain = base.engine_trans * getValueAtYear(ts.engine_trans_growth, year);
       const ePowertrain = base.e_powertrain * getValueAtYear(ts.e_powertrain_growth, year);
       const fcCost = bucket.fcetFuelCellKW * getValueAtYear(ts.fuel_cell_cost_per_kw, year);
       const batteryCost = bucket.fcetBatteryKWh * getValueAtYear(ts.battery_cost_per_kwh, year);
       const h2TankCost = bucket.h2TankKg * getValueAtYear(ts.h2_tank_cost_per_kg, year);
       const oem = FCET_OEM_MARGIN_BY_YEAR[Math.min(year, 2055)] ?? 0.35;
-      const raw = (base.engine_trans * engineTransGrowth) + ePowertrain + fcCost + batteryCost + h2TankCost;
+      const raw = dieselBase - dieselPowertrain + ePowertrain + fcCost + batteryCost + h2TankCost;
       const withMargin = raw * (1 + oem);
       // Phased incentive: full until phase1_end, reduced until phase2_end, zero after
       const fcetIncentivePerKwh = year <= policy.fcet_incentive_phase1_end_year

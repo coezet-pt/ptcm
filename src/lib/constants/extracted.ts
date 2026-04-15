@@ -362,7 +362,7 @@ export const BAU_POLICY = {
   bet_maturity_year: 2035,
   h2ice_maturity_year: 2042,
   fcet_maturity_year: 2045,
-  range_filling_concern_after_2035: false,
+  range_filling_concern_after_2035: true,
   gvw_payload_compensation_t: 0,
 };
 
