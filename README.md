@@ -210,6 +210,4 @@ MIT
 
 ## Acknowledgments
 
-- Built on [Lovable.dev](https://lovable.dev)
-- Original Excel model courtesy of the domain team
-- Deployed on [Vercel](https://vercel.com)
+- Original Excel model courtesy of CoEZET IIT Madras
