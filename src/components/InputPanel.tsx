@@ -1,6 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Play, Undo2 } from 'lucide-react';
 import ParameterRow from './ParameterRow';
 import PolicyLevers from './PolicyLevers';
+import { useScenario } from '@/contexts/ScenarioContext';
 import type { ParameterKey } from '@/lib/types';
 
 const PARAM_KEYS: ParameterKey[] = [
@@ -22,6 +26,8 @@ const PARAM_KEYS: ParameterKey[] = [
 ];
 
 export default function InputPanel() {
+  const { isDirty, applyChanges, discardChanges } = useScenario();
+
   return (
     <div className="space-y-6">
       {/* Section 1: Cost Trajectories */}
@@ -53,6 +59,40 @@ export default function InputPanel() {
 
       {/* Section 2: Policy Levers */}
       <PolicyLevers />
+
+      {/* Sticky Apply / Discard bar */}
+      <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 bg-card/90 backdrop-blur-md border-t border-border flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {isDirty ? (
+            <Badge variant="outline" className="text-warning border-warning">
+              Unapplied changes
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">Charts are up to date</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!isDirty}
+            onClick={discardChanges}
+            className="gap-1.5"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            disabled={!isDirty}
+            onClick={applyChanges}
+            className="gap-1.5"
+          >
+            <Play className="h-3.5 w-3.5" />
+            Apply Changes (Go)
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

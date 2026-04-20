@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download, Table2 } from 'lucide-react';
-import { exportPNG, exportCSV } from '@/lib/exporters';
+import { exportPNG, exportCSV, exportXLSX } from '@/lib/exporters';
 
 interface Props {
   title: string;
@@ -15,6 +15,7 @@ interface Props {
 export default function ChartCard({ title, description, children, csvData, csvFilename }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [showTable, setShowTable] = useState(false);
+  const fname = csvFilename || title;
 
   return (
     <Card className="overflow-hidden">
@@ -35,7 +36,7 @@ export default function ChartCard({ title, description, children, csvData, csvFi
           )}
           <Button
             variant="ghost" size="icon" className="h-7 w-7"
-            onClick={() => chartRef.current && exportPNG(chartRef.current, csvFilename || title)}
+            onClick={() => chartRef.current && exportPNG(chartRef.current, fname)}
             title="Download PNG"
           >
             <Download className="h-3.5 w-3.5" />
@@ -48,10 +49,14 @@ export default function ChartCard({ title, description, children, csvData, csvFi
         </div>
         {showTable && csvData && (
           <div className="mt-3 border-t pt-2">
-            <div className="flex justify-end mb-1">
+            <div className="flex justify-end gap-2 mb-1">
               <Button variant="outline" size="sm" className="h-6 text-xs"
-                onClick={() => exportCSV(csvData, csvFilename || title)}>
+                onClick={() => exportCSV(csvData, fname)}>
                 Download CSV
+              </Button>
+              <Button variant="outline" size="sm" className="h-6 text-xs"
+                onClick={() => exportXLSX(csvData, fname)}>
+                Download XLSX
               </Button>
             </div>
             <div className="max-h-40 overflow-auto text-[10px]">

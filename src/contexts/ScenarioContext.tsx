@@ -15,11 +15,18 @@ interface ScenarioContextValue {
   presets: Record<ScenarioName, { id: string; description: string; config: ScenarioConfig }>;
   loading: boolean;
   activeScenario: ScenarioName | 'Custom';
+  /** Applied config — what the simulation uses */
   config: ScenarioConfig;
+  /** Draft config — what the input forms bind to */
+  draftConfig: ScenarioConfig;
+  /** True when draftConfig differs from applied config */
+  isDirty: boolean;
   setActiveScenario: (name: ScenarioName | 'Custom') => void;
   updateParameter: (key: ParameterKey, field: string, value: number) => void;
   updatePolicy: <K extends keyof PolicyConfig>(key: K, value: PolicyConfig[K]) => void;
   resetToBAU: () => void;
+  applyChanges: () => void;
+  discardChanges: () => void;
 }
 
 const ScenarioContext = createContext<ScenarioContextValue | null>(null);
@@ -29,6 +36,8 @@ export function ScenarioProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [activeScenario, setActiveScenarioState] = useState<ScenarioName | 'Custom'>('BAU');
   const [config, setConfig] = useState<ScenarioConfig>(structuredClone(bauConfig));
+  const [draftConfig, setDraftConfig] = useState<ScenarioConfig>(structuredClone(bauConfig));
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     supabase
@@ -39,7 +48,6 @@ export function ScenarioProvider({ children }: { children: React.ReactNode }) {
           const map: any = {};
           for (const row of data) {
             const name = row.name as ScenarioName;
-            // If config is empty, fall back to BAU defaults
             const hasConfig = row.config && Object.keys(row.config as object).length > 0;
             const fallback = SCENARIO_CONFIGS[name] ?? bauConfig;
             map[name] = {
@@ -57,13 +65,17 @@ export function ScenarioProvider({ children }: { children: React.ReactNode }) {
   const setActiveScenario = useCallback((name: ScenarioName | 'Custom') => {
     setActiveScenarioState(name);
     if (name !== 'Custom' && presets[name]) {
-      setConfig(structuredClone(presets[name].config));
+      const next = structuredClone(presets[name].config);
+      setConfig(next);
+      setDraftConfig(structuredClone(next));
+      setIsDirty(false);
     }
   }, [presets]);
 
   const updateParameter = useCallback((key: ParameterKey, field: string, value: number) => {
     setActiveScenarioState('Custom');
-    setConfig(prev => ({
+    setIsDirty(true);
+    setDraftConfig(prev => ({
       ...prev,
       parameters: {
         ...prev.parameters,
@@ -74,7 +86,8 @@ export function ScenarioProvider({ children }: { children: React.ReactNode }) {
 
   const updatePolicy = useCallback(<K extends keyof PolicyConfig>(key: K, value: PolicyConfig[K]) => {
     setActiveScenarioState('Custom');
-    setConfig(prev => ({
+    setIsDirty(true);
+    setDraftConfig(prev => ({
       ...prev,
       policy: { ...prev.policy, [key]: value },
     }));
@@ -82,13 +95,27 @@ export function ScenarioProvider({ children }: { children: React.ReactNode }) {
 
   const resetToBAU = useCallback(() => {
     setActiveScenarioState('BAU');
-    setConfig(structuredClone(bauConfig));
+    const next = structuredClone(bauConfig);
+    setConfig(next);
+    setDraftConfig(structuredClone(next));
+    setIsDirty(false);
   }, []);
+
+  const applyChanges = useCallback(() => {
+    setConfig(structuredClone(draftConfig));
+    setIsDirty(false);
+  }, [draftConfig]);
+
+  const discardChanges = useCallback(() => {
+    setDraftConfig(structuredClone(config));
+    setIsDirty(false);
+  }, [config]);
 
   return (
     <ScenarioContext.Provider value={{
-      presets, loading, activeScenario, config,
+      presets, loading, activeScenario, config, draftConfig, isDirty,
       setActiveScenario, updateParameter, updatePolicy, resetToBAU,
+      applyChanges, discardChanges,
     }}>
       {children}
     </ScenarioContext.Provider>

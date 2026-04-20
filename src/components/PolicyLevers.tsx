@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { H2SourceMix } from '@/lib/types';
 
 export default function PolicyLevers() {
-  const { config, updatePolicy } = useScenario();
-  const p = config.policy;
+  const { draftConfig, updatePolicy } = useScenario();
+  const p = draftConfig.policy;
 
   return (
     <Card>
