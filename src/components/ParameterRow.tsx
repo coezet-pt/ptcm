@@ -13,9 +13,9 @@ interface Props {
 }
 
 export default function ParameterRow({ paramKey }: Props) {
-  const { config, updateParameter } = useScenario();
+  const { draftConfig, updateParameter } = useScenario();
   const meta = PARAMETER_META[paramKey];
-  const param = config.parameters[paramKey];
+  const param = draftConfig.parameters[paramKey];
 
   const isGrowthRate = paramKey.includes('growth');
 
