@@ -45,6 +45,7 @@ export const SCENARIO_CONFIGS: Record<string, ScenarioConfig> = {
       h2ice_maturity_year: 2042,
       fcet_maturity_year: 2045,
     },
+    ...structuredClone(baseExtras),
   },
 
   'BWS-2': {
