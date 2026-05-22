@@ -1,6 +1,6 @@
-import type { Powertrain, ScenarioName } from './constants/extracted';
+import type { Powertrain, ScenarioName, VehicleSize } from './constants/extracted';
 
-// ── Parameter config (15 cost trajectories) ──
+// ── Parameter config (cost trajectories) ──
 export interface ParameterConfig {
   baseValue: number;
   d2630: number;
@@ -10,11 +10,14 @@ export interface ParameterConfig {
 }
 
 export type ParameterKey =
+  // Primary fuel/energy
   | 'diesel_price_per_l'
   | 'cng_price_per_kg'
   | 'lng_price_per_kg'
+  | 'electricity_incl_caas_per_kwh'
   | 'green_h2_production_per_kg'
   | 'grey_h2_production_per_kg'
+  // Existing other trajectories
   | 'h2_compression_storage_per_kg'
   | 'electricity_per_kwh'
   | 'battery_cost_per_kwh'
@@ -24,7 +27,37 @@ export type ParameterKey =
   | 'adblue_per_l'
   | 'diesel_vehicle_growth'
   | 'engine_trans_growth'
-  | 'e_powertrain_growth';
+  | 'e_powertrain_growth'
+  // New v9 trajectories
+  | 'discom_electricity_per_kwh'
+  | 'fixed_demand_charges_per_kwh'
+  | 'charging_infra_per_kwh'
+  | 'green_h2_electricity_per_kg'
+  | 'green_h2_capex_per_kg'
+  | 'green_h2_opex_margin_per_kg'
+  | 'grey_h2_blend_fraction'
+  | 'lng_valves_piping_per_vehicle';
+
+// ── Fixed (non-year-varying) parameters ──
+export interface FixedParameters {
+  interest_rate_ice: number;
+  insurance_rate_per_year: number;
+  adblue_consumption_l_per_l_diesel: number;
+  battery_life_cycles: number;
+  fuel_cell_life_hours: number;
+  battery_energy_density_kg_per_kwh: number;
+  fuel_cell_power_density_kg_per_kw: number;
+  tat_gradeability: Record<Powertrain, number>;
+  range_filling_time: Record<Powertrain, number>;
+}
+
+// ── Per-segment vehicle base prices (2025 INR) ──
+export interface SegmentBasePrice {
+  engine_trans: number;
+  e_powertrain: number;
+  diesel_total: number;
+}
+export type SegmentBasePrices = Record<VehicleSize, SegmentBasePrice>;
 
 export type H2SourceMix = 'green_only' | 'blend_2046_green' | 'cheapest';
 
