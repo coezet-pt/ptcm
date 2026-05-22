@@ -142,13 +142,19 @@ export default function InputPanel() {
                   <FixedParamGroup />
                 </AccordionContent>
               </AccordionItem>
+
+              <AccordionItem value="E">
+                <AccordionTrigger className="text-sm font-medium">
+                  E. Policy Levers
+                </AccordionTrigger>
+                <AccordionContent>
+                  <PolicyLevers />
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
           </CardContent>
         </Card>
       )}
-
-      {/* Policy Levers */}
-      <PolicyLevers />
 
       {/* Sticky Apply / Discard bar */}
       <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 bg-card/90 backdrop-blur-md border-t border-border flex items-center justify-between gap-3">
