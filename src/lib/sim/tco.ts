@@ -2,7 +2,7 @@
  * TCO module — vehicle prices and 7-year total cost of ownership
  * per bucket × powertrain × target year.
  */
-import type { ParameterKey, PolicyConfig } from '@/lib/types';
+import type { ParameterKey, PolicyConfig, FixedParameters, SegmentBasePrices } from '@/lib/types';
 import type { Powertrain, Bucket } from '@/lib/constants/extracted';
 import {
   VEHICLE_BASE_PRICES_2025,
@@ -12,8 +12,6 @@ import {
   RESALE_VALUES,
   BUCKET_RESALE_PROFILE,
   FINANCE,
-  TECH_SPECS,
-  EMISSION_FACTORS,
   POWERTRAINS,
 } from '@/lib/constants/extracted';
 import { getValueAtYear } from './timeSeries';
@@ -35,20 +33,18 @@ export interface TCOResult {
 export type BucketTCOMap = Record<string, Record<Powertrain, TCOResult>>;
 
 // ── CNG tank cost — per-vehicle, NOT per-kg [fix #4] ──
-const CNG_TANK_BASE_SMALL = 150000; // sizes ≤ 28T
+const CNG_TANK_BASE_SMALL = 150000;
 const CNG_TANK_BASE_LARGE = 250000;
-const CNG_TANK_GROWTH = 0.01; // 1% YoY
-const LNG_VALVES_BASE = 100000;
-const LNG_VALVES_GROWTH = 0.01;
+const CNG_TANK_GROWTH = 0.01;
 
 // Manpower (driver + crew) constants — back-solved from Excel B1
-const MANPOWER_BASE_2025_DIESEL = 400000;  // ₹4L/yr (Diesel, CNG, LNG, H2-ICE)
-const MANPOWER_BASE_2025_BET    = 460000;  // ₹4.6L/yr (BET, FCET)
-const MANPOWER_GROWTH = 0.04534;            // 4.53% YoY — (971000/400000)^(1/20)-1
+const MANPOWER_BASE_2025_DIESEL = 400000;
+const MANPOWER_BASE_2025_BET    = 460000;
+const MANPOWER_GROWTH = 0.04534;
 
 // Toll constants
-const TOLL_BASE_PER_KM = 2.5; // ₹/km in 2025
-const TOLL_GROWTH = 0.025; // 2.5% YoY // TODO: parameterise
+const TOLL_BASE_PER_KM = 2.5;
+const TOLL_GROWTH = 0.025;
 
 function isSmallSize(size: string): boolean {
   return size.includes('15T') || size.includes('19T');
@@ -68,22 +64,26 @@ function getH2PricePerKg(
   const green = getValueAtYear(ts.green_h2_production_per_kg, year);
   const grey = getValueAtYear(ts.grey_h2_production_per_kg, year);
   const compression = getValueAtYear(ts.h2_compression_storage_per_kg, year);
+  const blend = Math.max(0, Math.min(1, getValueAtYear(ts.grey_h2_blend_fraction, year) ?? 0));
 
   let productionCost: number;
-  switch (policy.h2_source_mix) {
-    case 'green_only':
-      productionCost = green;
-      break;
-    case 'blend_2046_green':
-      productionCost = year < 2046
-        ? (green + grey) / 2
-        : green;
-      break;
-    case 'cheapest':
-      productionCost = Math.min(green, grey);
-      break;
-    default:
-      productionCost = green;
+  if (blend > 0) {
+    // Explicit blend override
+    productionCost = (1 - blend) * green + blend * grey;
+  } else {
+    switch (policy.h2_source_mix) {
+      case 'green_only':
+        productionCost = green;
+        break;
+      case 'blend_2046_green':
+        productionCost = year < 2046 ? (green + grey) / 2 : green;
+        break;
+      case 'cheapest':
+        productionCost = Math.min(green, grey);
+        break;
+      default:
+        productionCost = green;
+    }
   }
   return productionCost + compression;
 }
@@ -94,8 +94,9 @@ function computeVehiclePrice(
   year: number,
   ts: Record<ParameterKey, number[]>,
   policy: PolicyConfig,
+  segmentBasePrices: SegmentBasePrices,
 ): number {
-  const base = VEHICLE_BASE_PRICES_2025[bucket.size];
+  const base = segmentBasePrices[bucket.size] ?? VEHICLE_BASE_PRICES_2025[bucket.size];
   const dy = year - 2025;
 
   switch (pt) {
@@ -112,15 +113,11 @@ function computeVehiclePrice(
     case 'LNG': {
       const dieselPrice = base.diesel_total * Math.pow(1.03, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const lngTankCostPerKg = getValueAtYear(ts.lng_tank_cost_per_kg, year);
-      // LNG tank capacity in kg ≈ litres × density
-      const lngCapacityKg = isSmallSize(bucket.size)
-        ? 450 * 0.35 // small
-        : 990 * 0.35; // large
-      const valves = LNG_VALVES_BASE * Math.pow(1 + LNG_VALVES_GROWTH, dy);
+      const lngCapacityKg = isSmallSize(bucket.size) ? 450 * 0.35 : 990 * 0.35;
+      const valves = getValueAtYear(ts.lng_valves_piping_per_vehicle, year);
       return dieselPrice + lngCapacityKg * lngTankCostPerKg + valves;
     }
     case 'BET': {
-      // Excel formula: dieselBase - dieselPowertrain + ePowertrain + battery, then OEM margin, then incentive
       const dieselBase = base.diesel_total * Math.pow(1.03, dy)
         + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const dieselPowertrain = base.engine_trans * getValueAtYear(ts.engine_trans_growth, year);
@@ -129,7 +126,6 @@ function computeVehiclePrice(
       const oem = BET_OEM_MARGIN_BY_YEAR[Math.min(year, 2055)] ?? 0.25;
       const raw = dieselBase - dieselPowertrain + ePowertrain + batteryCost;
       const withMargin = raw * (1 + oem);
-      // Phased incentive: full until phase1_end, reduced until phase2_end, zero after
       const betIncentivePerKwh = year <= policy.bet_incentive_phase1_end_year
         ? policy.bet_demand_incentive_per_kwh
         : year <= policy.bet_incentive_phase2_end_year
@@ -144,7 +140,6 @@ function computeVehiclePrice(
       return dieselPrice + h2TankCost;
     }
     case 'H2-FCET': {
-      // Excel formula: dieselBase - dieselPowertrain + ePowertrain + fuelCell + battery + h2Tank, then OEM margin, then incentive
       const dieselBase = base.diesel_total * Math.pow(1.03, dy)
         + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const dieselPowertrain = base.engine_trans * getValueAtYear(ts.engine_trans_growth, year);
@@ -155,7 +150,6 @@ function computeVehiclePrice(
       const oem = FCET_OEM_MARGIN_BY_YEAR[Math.min(year, 2055)] ?? 0.35;
       const raw = dieselBase - dieselPowertrain + ePowertrain + fcCost + batteryCost + h2TankCost;
       const withMargin = raw * (1 + oem);
-      // Phased incentive: full until phase1_end, reduced until phase2_end, zero after
       const fcetIncentivePerKwh = year <= policy.fcet_incentive_phase1_end_year
         ? policy.fcet_demand_incentive_per_kwh
         : year <= policy.fcet_incentive_phase2_end_year
@@ -175,12 +169,14 @@ function computeFuelCostPerKm(
   year: number,
   ts: Record<ParameterKey, number[]>,
   policy: PolicyConfig,
+  fixed: FixedParameters,
 ): number {
   switch (pt) {
     case 'Diesel': {
       const dieselPrice = getValueAtYear(ts.diesel_price_per_l, year);
       const adbluePrice = getValueAtYear(ts.adblue_per_l, year);
-      return dieselPrice / bucket.dieselKMPL + adbluePrice * TECH_SPECS.adblue_consumption_l_per_l_diesel / bucket.dieselKMPL;
+      return dieselPrice / bucket.dieselKMPL
+        + adbluePrice * fixed.adblue_consumption_l_per_l_diesel / bucket.dieselKMPL;
     }
     case 'CNG':
       return getValueAtYear(ts.cng_price_per_kg, year) / bucket.cngKmPerKg;
@@ -188,7 +184,8 @@ function computeFuelCostPerKm(
       return getValueAtYear(ts.lng_price_per_kg, year) / bucket.lngKmPerKg;
     case 'BET': {
       const subsidy = year <= policy.electricity_subsidy_end_year ? policy.electricity_subsidy_per_kwh : 0;
-      const elecPrice = getValueAtYear(ts.electricity_per_kwh, year) - subsidy;
+      // Use Electricity incl CAAS as the BET energy price (v9 spec).
+      const elecPrice = getValueAtYear(ts.electricity_incl_caas_per_kwh, year) - subsidy;
       return Math.max(0, elecPrice) * bucket.betKwhPerKm;
     }
     case 'H2-ICE':
@@ -202,7 +199,7 @@ function computeFuelCostPerKm(
 
 function getMaintenancePerKm(pt: Powertrain, bucket: Bucket): number {
   if (pt === 'Diesel') return bucket.maintDieselPerKm;
-  if (pt === 'BET' || pt === 'H2-FCET') return bucket.maintDieselPerKm * 0.6; // ~60% of diesel
+  if (pt === 'BET' || pt === 'H2-FCET') return bucket.maintDieselPerKm * 0.6;
   return bucket.maintCngLngH2icePerKm;
 }
 
@@ -215,18 +212,33 @@ export function computeTCO(
   policy: PolicyConfig,
   buckets: Bucket[],
   targetYear: number,
+  fixed?: FixedParameters,
+  segmentBasePrices?: SegmentBasePrices,
 ): BucketTCOMap {
+  // Fallback defaults so module is usable in tests/scripts without full config
+  const fp: FixedParameters = fixed ?? {
+    interest_rate_ice: FINANCE.diesel_cng_lng_h2ice_interest_pa_default,
+    insurance_rate_per_year: FINANCE.insurance_rate_per_year,
+    adblue_consumption_l_per_l_diesel: 0.05,
+    battery_life_cycles: 3000,
+    fuel_cell_life_hours: 25000,
+    battery_energy_density_kg_per_kwh: 8,
+    fuel_cell_power_density_kg_per_kw: 4,
+    tat_gradeability: { Diesel: 1, CNG: 0.95, LNG: 0.95, BET: 1.15, 'H2-ICE': 0.95, 'H2-FCET': 1.15 },
+    range_filling_time: { Diesel: 1, CNG: 1.05, LNG: 1.10, BET: 1.20, 'H2-ICE': 1, 'H2-FCET': 1 },
+  };
+  const sbp: SegmentBasePrices = segmentBasePrices ?? (VEHICLE_BASE_PRICES_2025 as SegmentBasePrices);
+
   const result: BucketTCOMap = {};
 
   for (const bucket of buckets) {
     const ptResults = {} as Record<Powertrain, TCOResult>;
     const dy = targetYear - 2025;
-    const tollPerKm = TOLL_BASE_PER_KM * Math.pow(1 + TOLL_GROWTH, dy); // TODO: parameterise
+    const tollPerKm = TOLL_BASE_PER_KM * Math.pow(1 + TOLL_GROWTH, dy);
 
     for (const pt of POWERTRAINS) {
-      const price = computeVehiclePrice(pt, bucket, targetYear, ts, policy);
+      const price = computeVehiclePrice(pt, bucket, targetYear, ts, policy, sbp);
 
-      // Resale — BET override for 2046+ purchases
       const profile = BUCKET_RESALE_PROFILE[bucket.id] ?? 'general';
       const tier = resaleTier(targetYear);
       let resalePct = RESALE_VALUES[profile][pt][tier];
@@ -235,23 +247,19 @@ export function computeTCO(
       }
       const resale = price * resalePct;
 
-      // Finance
-      const rate = isZET(pt) ? policy.interest_rate_zet : FINANCE.diesel_cng_lng_h2ice_interest_pa_default;
+      const rate = isZET(pt) ? policy.interest_rate_zet : fp.interest_rate_ice;
       const tenure = policy.loan_tenure_years;
       const interest = price * rate * tenure / 2;
-      const insurance = price * FINANCE.insurance_rate_per_year * FINANCE.useful_life_years;
+      const insurance = price * fp.insurance_rate_per_year * FINANCE.useful_life_years;
 
-      // Capex
       const capex = price - resale + interest + insurance;
 
-      // Opex per year
-      const fuelPerKm = computeFuelCostPerKm(pt, bucket, targetYear, ts, policy);
+      const fuelPerKm = computeFuelCostPerKm(pt, bucket, targetYear, ts, policy, fp);
       const maintPerKm = getMaintenancePerKm(pt, bucket);
 
-      // Toll with waiver for ZET — weighted average over useful life
       let effectiveToll = tollPerKm;
       if (isZET(pt)) {
-        const life = FINANCE.useful_life_years; // 7
+        const life = FINANCE.useful_life_years;
         const p1 = Math.min(policy.toll_waiver_first_period_years, life);
         const p2 = Math.min(policy.toll_waiver_second_period_years, life - p1);
         const p3 = Math.max(0, life - p1 - p2);
@@ -280,29 +288,6 @@ export function computeTCO(
       };
     }
     result[bucket.id] = ptResults;
-  }
-
-  // DEBUG — detailed B1 2045 breakdown
-  if (typeof window !== 'undefined' && targetYear === 2045) {
-    const b1 = result['B1'];
-    if (b1) {
-      console.group('🔬 TCO TRACE — B1 2045 (Excel ref: Diesel=56.94, BET=49.68)');
-      for (const pt of POWERTRAINS) {
-        const r = b1[pt];
-        console.log(pt, {
-          vehiclePrice_lakh: (r.vehiclePrice / 100000).toFixed(2),
-          tcoPerKm: r.tcoPerKm.toFixed(2),
-          capexPerKm: r.capexPerKm.toFixed(2),
-          opexPerKm: r.opexPerKm.toFixed(2),
-          fuelCostPerKm: r.fuelCostPerKm.toFixed(4),
-          maintPerKm: r.maintPerKm.toFixed(4),
-          manpowerPerKm: r.manpowerPerKm.toFixed(4),
-          tollPerKm: r.tollPerKm.toFixed(4),
-          resalePct: r.resalePct,
-        });
-      }
-      console.groupEnd();
-    }
   }
 
   return result;
