@@ -307,7 +307,7 @@ export type ScenarioName = 'BAU' | 'BWS-1' | 'BWS-2' | 'BEST';
 export const SCENARIO_INFLECTION_YEARS: Record<ScenarioName, {
   BET: number; 'H2-ICE': number; 'H2-FCET': number;
 }> = {
-  'BAU':   { BET: 2038, 'H2-ICE': 2050, 'H2-FCET': 2050 },
+  'BAU':   { BET: 2031, 'H2-ICE': 2051, 'H2-FCET': 2051 },
   'BWS-1': { BET: 2036, 'H2-ICE': 2049, 'H2-FCET': 2049 },
   'BWS-2': { BET: 2036, 'H2-ICE': 2049, 'H2-FCET': 2049 },
   'BEST':  { BET: 2032, 'H2-ICE': 2049, 'H2-FCET': 2049 },
