@@ -91,11 +91,23 @@ for year, sn in EST_SHEETS.items():
 #    cols: B=Diesel sale, D=BET, F=H2-ICE, H=FCET, J=CNG, L=LNG, N=Total
 # --------------------------------------------------------------------------
 ws = wb["Output Summary"]
-COL = {"Diesel": 2, "BET": 4, "H2-ICE": 6, "H2-FCET": 8, "CNG": 10, "LNG": 12, "Total": 14}
+# Positional map — workbook headers are buggy; map by column index.
+SALE_COL  = {"Diesel": 2, "BET": 4, "H2-ICE": 6, "H2-FCET": 8, "CNG": 10, "LNG": 12}
+STOCK_COL = {"Diesel": 3, "BET": 5, "H2-ICE": 7, "H2-FCET": 9, "CNG": 11, "LNG": 13}
+TOTAL_SALE_COL = 14
 bau_ref = {}
 for r in range(29, 60):
     year = ws.cell(r, 1).value
-    bau_ref[year] = {pt: (ws.cell(r, c).value or 0) for pt, c in COL.items()}
+    row = {pt: (ws.cell(r, c).value or 0) for pt, c in SALE_COL.items()}
+    row["Total"] = ws.cell(r, TOTAL_SALE_COL).value or 0
+    for pt, c in STOCK_COL.items():
+        row[f"{pt}_stock"] = ws.cell(r, c).value or 0
+    bau_ref[year] = row
+
+output_summary_headers = {
+    "row1": [ws.cell(1, c).value for c in range(1, 15)],
+    "row2": [ws.cell(2, c).value for c in range(1, 15)],
+}
 
 
 # --------------------------------------------------------------------------
@@ -123,6 +135,7 @@ audit = {
     "sum_violations": sum_violations,
     "bau_reference": bau_ref,
     "tiv_estimates": tiv_estimates,
+    "output_summary_headers": output_summary_headers,
 }
 OUT.write_text(json.dumps(audit, indent=2, default=str))
 

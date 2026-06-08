@@ -1,32 +1,66 @@
 /**
  * Segment & Application taxonomy — formal workbook taxonomy (CoEZET_PTCM_v3).
  *
- * Segment = vehicle body family (Rigid / Tipper / Tractor) — derived from
- *   bucket.size per the Buckets sheet 'Model' column.
- * Application = use-case — matches bucket.useCase verbatim.
+ * Segments = 7 tonnage bands per `Segmentwise Sales` row 1:
+ *   Rigid 12–19T, Rigid 19–28.5T, Rigid 28.5–40T, Rigid >40T,
+ *   TT 31–40T, TT 40–46T, TT 46–55T
+ * Bands assigned by bucket GVW (NOT body type — tippers fall into the matching
+ * tonnage band; there is no separate Tipper segment).
+ *
+ * Applications = use-case = bucket.useCase verbatim.
  */
 import { BUCKETS, type Powertrain } from './extracted';
 
-// ── Segments = body family (3 categories per v3 workbook) ───────────────────
-export type Segment = 'Rigid' | 'Tipper (Rigid)' | 'Tractor (T-T)';
+// ── 7 segment bands ─────────────────────────────────────────────────────────
+export type Segment =
+  | 'Rigid 12-19T'
+  | 'Rigid 19-28.5T'
+  | 'Rigid 28.5-40T'
+  | 'Rigid >40T'
+  | 'TT 31-40T'
+  | 'TT 40-46T'
+  | 'TT 46-55T';
 
-export const SEGMENTS: Segment[] = ['Rigid', 'Tipper (Rigid)', 'Tractor (T-T)'];
+export const SEGMENTS: Segment[] = [
+  'Rigid 12-19T',
+  'Rigid 19-28.5T',
+  'Rigid 28.5-40T',
+  'Rigid >40T',
+  'TT 31-40T',
+  'TT 40-46T',
+  'TT 46-55T',
+];
 
-function sizeToSegment(size: string): Segment {
-  const s = size.toLowerCase();
-  if (s.includes('tip')) return 'Tipper (Rigid)';
-  if (s.includes('tractor')) return 'Tractor (T-T)';
-  return 'Rigid';
+/** Map GVW (kg) + body family to a segment band.
+ *  Tractors → TT bands; everything else → Rigid bands (tippers included).
+ */
+function classifySegment(gvwKg: number, size: string): Segment {
+  const t = gvwKg / 1000;
+  const isTractor = /tractor/i.test(size);
+  if (isTractor) {
+    if (t <= 40) return 'TT 31-40T';
+    if (t <= 46) return 'TT 40-46T';
+    return 'TT 46-55T';
+  }
+  // Rigid family (includes Tipper). Bands: 12–19, 19–28.5, 28.5–40, >40 (upper-exclusive).
+  if (t < 19) return 'Rigid 12-19T';
+  if (t < 28.5) return 'Rigid 19-28.5T';
+  if (t <= 40) return 'Rigid 28.5-40T';
+  return 'Rigid >40T';
 }
 
 export const SEGMENT_OF_BUCKET: Record<string, Segment> = Object.fromEntries(
-  BUCKETS.map(b => [b.id, sizeToSegment(b.size)]),
+  BUCKETS.map(b => [b.id, classifySegment(b.gvw, b.size)]),
 );
 
 export const SEGMENT_COLORS: Record<Segment, string> = {
-  'Rigid':          '#3b82f6',
-  'Tipper (Rigid)': '#f59e0b',
-  'Tractor (T-T)':  '#10b981',
+  'Rigid 12-19T':   '#93c5fd',
+  'Rigid 19-28.5T': '#3b82f6',
+  'Rigid 28.5-40T': '#1d4ed8',
+  'Rigid >40T':     '#1e3a8a',
+  'TT 31-40T':      '#fbbf24',
+  'TT 40-46T':      '#f59e0b',
+  'TT 46-55T':      '#b45309',
 };
 
 // ── Applications = useCase (9 categories, matches workbook verbatim) ────────
