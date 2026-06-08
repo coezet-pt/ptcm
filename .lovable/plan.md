@@ -1,52 +1,44 @@
-## Turn 2 — Re-extract `extracted.ts` from CoEZET_PTCM_v3.xlsx + validation
+## Turn 3 (revised) — ship P1 + P2 + 3a + 3b continuously, one combined report
 
-### Goal
+No stop-and-wait. 3c is **out**. Banners stay on.
 
-Replace all global constants from the v3 workbook and prove the simulation matches `Output Summary` (BAU, rows 29–59, 2025–2055) before any further feature work.
+### P1 — 7-band segment taxonomy (`src/lib/constants/segments.ts`)
+Bands: `Rigid 12–19T`, `Rigid 19–28.5T`, `Rigid 28.5–40T`, `Rigid >40T`, `TT 31–40T`, `TT 40–46T`, `TT 46–55T`. Map each bucket by **GVW** (no separate Tipper segment). Verify provisional mapping (B6 16T→12-19, B1/B4 18.5T→12-19, B2/B5/B7/B12/B13 28T→19-28.5, B8 35T→28.5-40, B3/B9 47.5T→>40, B14 39.5T→TT 31-40, B10/B11 55T→TT 46-55) against `Segmentwise Sales` cols on read. Update `SEGMENT_COLORS` for 7 bands.
 
-### Workflow
+### P2 — Harness audit (`scripts/validate_against_xlsx.ts`)
+- Print raw header rows 1-2 from `Output Summary` so column mapping is visible. **Do not assert against header text** — workbook headers are wrong (FCET Stock duplicated in CNG/LNG cols).
+- Hard-code positional map: A=year, B=Diesel sale, C=Diesel stock, D=BET sale, E=BET stock, F=H2ICE sale, G=H2ICE stock, H=FCET sale, I=FCET stock, J=CNG sale, K=CNG stock, L=LNG sale, M=LNG stock, N=Total sale.
+- Add second diff table: sim `stockByPT` vs ref stock columns.
 
-1. **Extraction script** — `scripts/extract_constants.py`
-  - Reads `CoEZET_PTCM_v3.xlsx` (already in repo / uploads).
-  - Pulls every sheet needed for the constants below into typed Python dicts.
-  - Writes a fresh `src/lib/constants/extracted.ts` with a header comment listing source sheet+cell ranges for every export.
-  - Idempotent: re-running with the same workbook yields byte-identical output.
-2. **Rewrite `src/lib/constants/extracted.ts**` — keep names stable so no downstream import breaks:
-  - Unchanged signatures: `POWERTRAINS`, `VEHICLE_BASE_PRICES_2025`, `BUCKETS`, `RESALE_VALUES`, `TIV_PROJECTION`, `HISTORICAL_SALES`, `DIESEL_STOCK_END_2024`, `EMISSION_FACTORS`, `START_OF_SUPPLY`, `PTTM_PILOT_SHARE`, `WEIBULL_SHAPE_ALPHA`, `WEIBULL_PEAK_YEAR`.
-  - **New exports**: `SEGMENTS` (7), `BUCKET_SEGMENT_MAP`, `APPLICATIONS` (10), `BUCKET_APPLICATION_MAP`, `MAINT_CURVES`, `TOLL_PER_KM`, `MANPOWER_PER_KM`, `H2_COST_CHAIN`, `ELECTRICITY_CHAIN`, `STEADY_STATE_SHARES` (2035/2040/2045/2050/2055), `STEADY_STATE_TIV`, `S_CURVE_PARAMS`.
-3. **Wire formal taxonomy into segment/application charts**
-  - `src/lib/constants/segments.ts` becomes a thin re-export of `SEGMENTS` / `APPLICATIONS` / maps from `extracted.ts`.
-  - Remove the `(preliminary)` banners from the 4 derived tabs in `ChartTabs.tsx`.
-4. **Validation harness** — `scripts/validate_against_xlsx.ts`
-  - Runs the existing BAU scenario through `pttm.ts` → `stockEmissions.ts`.
-  - Reads `Output Summary` rows 29–59 from the workbook (sales by PT per year, 2025–2055).
-  - Prints a per-year, per-PT diff table with absolute and % error; flags any cell with |Δ%| > 1%.
-  - Exit non-zero if any flag.
-5. **Deliverable to user (this turn)**
-  - The diff table pasted into chat.
-  - No further features built until you approve the numbers.
+### 3a — Cost trajectories only in `extracted.ts`
+Refresh from `Changing with year` (v3):
+- Fuel/energy: `diesel_price_per_l`, `cng_price_per_kg`, `lng_price_per_kg`, `electricity_incl_caas_per_kwh`, `electricity_per_kwh`, `discom_electricity_per_kwh`, `fixed_demand_charges_per_kwh`, `charging_infra_per_kwh`, `green_h2_production_per_kg`, `grey_h2_production_per_kg`, `green_h2_electricity_per_kg`, `green_h2_capex_per_kg`, `green_h2_opex_margin_per_kg`, `h2_compression_storage_per_kg`, `adblue_per_l`
+- Tech costs: `battery_cost_per_kwh`, `fuel_cell_cost_per_kw`, `lng_tank_cost_per_kg`, `h2_tank_cost_per_kg`, `lng_valves_piping_per_vehicle`
+- Growth deltas: `engine_trans_growth`, `e_powertrain_growth`, `diesel_vehicle_growth`
 
-### Not touched this turn
+Refresh from `Buckets`/`No change with year`:
+- `VEHICLE_BASE_PRICES_2025` per size (engine_trans, e_powertrain, diesel_total)
+- `BS_VII_PRICE_BUMP_2030` if changed
 
-- `tco.ts`, `choiceModel.ts`, `pttm.ts`, `stockEmissions.ts`, `scenarios.ts`
-- Supabase schema / scenarios table
-- Multi-target ZET scenarios (2035/2040/2050/2055) — next turn after validation passes
-- UI components other than removing the 4 preliminary banners
+**Untouched:** `POWERTRAINS`, `BUCKETS`, `START_OF_SUPPLY`, `PTTM_PILOT_SHARE`, `WEIBULL_*`, `SCENARIO_*_YEARS`, `EMISSION_FACTORS`, all sim code.
+
+Add B1 2045 TCO trace to the harness — prints Diesel ₹/km and BET ₹/km (targets 56.94 / 49.68).
+
+### 3b — Only if 2025 CNG still ≈ 0 after 3a
+Set `CNG_UNITS_2025 = 14892` and `LNG_UNITS_2025 = 607` (exact, from Output Summary 2025 row cols J/L). If still zero, inspect `weibullShare` start-year guard in `pttm.ts` and fix the suppression.
+
+### Combined report I'll paste
+1. Output Summary header rows 1-2 (raw text)
+2. B1 2045 TCO trace (Diesel / BET ₹/km, target 56.94 / 49.68)
+3. BAU sales diff table (31 years × 6 PTs vs ref)
+4. BAU stock diff table (31 years × 6 PTs vs ref)
+5. 2025-2030 CNG/LNG rows for anchor check
+
+### 3c — Explicitly NOT done
+Lookup-overriding BAU shares would freeze interactivity on the default scenario. If BET still lags after 3a+3b, that's a real choice-model bug to diagnose in a later turn — not paper over.
 
 ### Files
-
-- **new**: `scripts/extract_constants.py`, `scripts/validate_against_xlsx.ts`
-- **rewritten**: `src/lib/constants/extracted.ts`
-- **edited**: `src/lib/constants/segments.ts`, `src/components/ChartTabs.tsx`
-
-&nbsp;
-
-Run the full extraction in one turn — no stop-and-wait gates. But the extraction must self-report these three things in its console output so I can validate after, not assume:
-
-1. **Print the full 14-bucket → segment map** as a table in the output. Don't pause for approval — just write it to extracted.ts AND echo it to console so I can eyeball it after.
-2. **Run the steady-state sum check inline** and print any bucket/year where the 6 PT shares don't sum to 1.0 ±0.5% (across all 5 Estimation sheets). If everything sums clean, print "✅ all steady-state shares sum to 1.0". Don't halt — just report.
-3. **Run the validation harness** against Output Summary rows 29–59 (BAU) at the end and print the full per-year, per-PT diff table with %error. Flag |Δ|>2% but don't exit non-zero — just show me.
-
-Then in one paste, give me: (a) the bucket→segment map, (b) the sum-check result, (c) the BAU diff table.
-
-One safety rule that's NOT optional: keep the `(preliminary)` banners on the 4 segment/application tabs until I review the diff table. Removing them is the only thing that would mislead someone before validation — everything else is just internal data that nobody sees until I check it. So: do the full extraction, swap the taxonomy, but leave the banners on. I'll tell you to remove them once the numbers check out.
+- `src/lib/constants/segments.ts` (P1)
+- `scripts/validate_against_xlsx.ts` (P2 + 3a trace)
+- `src/lib/constants/extracted.ts` (3a; 3b conditional)
+- `src/lib/sim/pttm.ts` (only if 3b reveals logic bug)
