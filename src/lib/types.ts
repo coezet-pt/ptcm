@@ -114,6 +114,11 @@ export interface AnnualResult {
   totalEmissions: number;
   dieselCounterfactualEmissions: number;
   zetShare: number;
+  // Segment / Application breakdowns (aggregated across powertrains)
+  salesBySegment: Record<string, number>;
+  stockBySegment: Record<string, number>;
+  salesByApplication: Record<string, number>;
+  stockByApplication: Record<string, number>;
 }
 
 export interface SimulationResult {
