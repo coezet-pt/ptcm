@@ -24,6 +24,8 @@ import { START_YEAR, END_YEAR, YEAR_COUNT } from './timeSeries';
 export interface AnnualPTSales {
   share: Record<Powertrain, number>;
   sales: Record<Powertrain, number>;
+  // Per-bucket share (used downstream for segment / application breakdowns)
+  sharesByBucket: Record<string, Record<Powertrain, number>>;
 }
 
 /**
@@ -128,9 +130,14 @@ export function computePTTM(
 ): AnnualPTSales[] {
   const annual: AnnualPTSales[] = [];
   for (let i = 0; i < YEAR_COUNT; i++) {
+    const sharesByBucket: Record<string, Record<Powertrain, number>> = {};
+    for (const b of buckets) {
+      sharesByBucket[b.id] = { Diesel: 0, CNG: 0, LNG: 0, BET: 0, 'H2-ICE': 0, 'H2-FCET': 0 };
+    }
     annual.push({
       share: { Diesel: 0, CNG: 0, LNG: 0, BET: 0, 'H2-ICE': 0, 'H2-FCET': 0 },
       sales: { Diesel: 0, CNG: 0, LNG: 0, BET: 0, 'H2-ICE': 0, 'H2-FCET': 0 },
+      sharesByBucket,
     });
   }
 
@@ -170,6 +177,7 @@ export function computePTTM(
           share2055: AB,
         });
         annual[i].share[pt] += val * weight;
+        annual[i].sharesByBucket[bucket.id][pt] = val;
       }
     }
 
@@ -190,7 +198,20 @@ export function computePTTM(
           tiv2025,
         });
         annual[i].share[pt] += val * weight;
+        annual[i].sharesByBucket[bucket.id][pt] = val;
       }
+    }
+
+    // Per-bucket residual diesel (so per-bucket sales sum cleanly)
+    for (let i = 0; i < YEAR_COUNT; i++) {
+      const sb = annual[i].sharesByBucket[bucket.id];
+      const nonD = sb.CNG + sb.LNG + sb.BET + sb['H2-ICE'] + sb['H2-FCET'];
+      if (nonD > 1) {
+        const scl = 1 / nonD;
+        sb.CNG *= scl; sb.LNG *= scl; sb.BET *= scl;
+        sb['H2-ICE'] *= scl; sb['H2-FCET'] *= scl;
+      }
+      sb.Diesel = Math.max(0, 1 - (sb.CNG + sb.LNG + sb.BET + sb['H2-ICE'] + sb['H2-FCET']));
     }
   }
 
