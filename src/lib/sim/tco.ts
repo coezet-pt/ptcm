@@ -211,10 +211,12 @@ function computeFuelCostPerKm(
   }
 }
 
-function getMaintenancePerKm(pt: Powertrain, bucket: Bucket): number {
-  if (pt === 'Diesel') return bucket.maintDieselPerKm;
-  if (pt === 'BET' || pt === 'H2-FCET') return bucket.maintDieselPerKm * 0.6;
-  return bucket.maintCngLngH2icePerKm;
+function getMaintenancePerKm(pt: Powertrain, bucket: Bucket, year: number): number {
+  const dy = year - 2025;
+  if (pt === 'Diesel') return bucket.maintDieselPerKm * Math.pow(1 + MAINT_DIESEL_CAGR, dy);
+  if (pt === 'BET')    return MAINT_BET_BASE_2025  * Math.pow(1 + MAINT_BET_CAGR,  dy);
+  if (pt === 'H2-FCET') return MAINT_FCET_BASE_2025 * Math.pow(1 + MAINT_FCET_CAGR, dy);
+  return bucket.maintCngLngH2icePerKm * Math.pow(1 + MAINT_OTHER_ICE_CAGR, dy);
 }
 
 function isZET(pt: Powertrain): boolean {
