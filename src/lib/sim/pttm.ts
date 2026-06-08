@@ -12,6 +12,7 @@ import {
   START_OF_SUPPLY,
   PTTM_PILOT_SHARE,
   PTTM_PILOT_START_YEAR,
+  GOMPERTZ_PARAMS_BY_PT,
   WEIBULL_SHAPE_ALPHA,
   WEIBULL_PEAK_YEAR,
   CNG_UNITS_2025,
@@ -40,22 +41,28 @@ function gompertzShare(args: {
   pilotShare: number;
   share2045: number;
   share2055: number;
+  literalB?: number;
+  literalC?: number;
 }): number {
-  const { year, startYear, inflectionYear, pilotShare, share2045, share2055 } = args;
+  const { year, startYear, inflectionYear, pilotShare, share2045, share2055, literalB, literalC } = args;
 
   if (year < startYear) return 0;
   if (share2055 <= 0) return 0;
 
   const aInitial = share2055;
   const W = pilotShare;
-  const b = Math.log(Math.max(aInitial, W * 1.01) / W);
+  // Use v3 literal b, c when supplied; else derive from anchors (legacy fallback).
+  const b = literalB !== undefined
+    ? literalB
+    : Math.log(Math.max(aInitial, W * 1.01) / W);
   const inflDelta = Math.max(inflectionYear - startYear, 1);
-  const c = -(1 / inflDelta) *
-            Math.log(Math.log(Math.max(aInitial, 0.1001) / 0.1) / b);
+  const c = literalC !== undefined
+    ? literalC
+    : -(1 / inflDelta) * Math.log(Math.log(Math.max(aInitial, 0.1001) / 0.1) / b);
   const endDelta = 2055 - startYear;
-  const a = share2055 / Math.exp(-b * Math.exp(-c * endDelta));
-
+  // a re-derived per-bucket so the un-corrected curve lands on share2055 at 2055
   const normDenom = Math.exp(-b * Math.exp(-c * endDelta));
+  const a = share2055 / normDenom;
 
   // Main Gompertz term (passes through AB at 2055)
   const gompertzMain = (a * Math.exp(-b * Math.exp(-c * (year - startYear)))) / normDenom;
@@ -160,10 +167,11 @@ export function computePTTM(
     const size = bucket.size as VehicleSize;
     const weight = bucket.tivShare2045;
 
-    // Gompertz PTs
+    // Gompertz PTs — use v3 literal a/b/c (global) per powertrain
     for (const pt of GOMPERTZ_PTS) {
-      const startYear = PTTM_PILOT_START_YEAR[pt as keyof typeof PTTM_PILOT_START_YEAR];
-      const W = PTTM_PILOT_SHARE[pt as keyof typeof PTTM_PILOT_SHARE] ?? 0.0001;
+      const lit = GOMPERTZ_PARAMS_BY_PT[pt as keyof typeof GOMPERTZ_PARAMS_BY_PT];
+      const startYear = lit?.startYear ?? PTTM_PILOT_START_YEAR[pt as keyof typeof PTTM_PILOT_START_YEAR];
+      const W = lit?.W ?? PTTM_PILOT_SHARE[pt as keyof typeof PTTM_PILOT_SHARE] ?? 0.0001;
       const AB = shares2055[bucket.id]?.[pt] ?? 0;
       const Z = shares2045[bucket.id]?.[pt] ?? 0;
       const inflYear = inflectionYears[pt] ?? 2038;
@@ -177,6 +185,8 @@ export function computePTTM(
           pilotShare: W,
           share2045: Z,
           share2055: AB,
+          literalB: lit?.b,
+          literalC: lit?.c,
         });
         annual[i].share[pt] += val * weight;
         annual[i].sharesByBucket[bucket.id][pt] = val;
