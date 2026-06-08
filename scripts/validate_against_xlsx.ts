@@ -5,7 +5,8 @@
  * Reads BAU reference from scripts/extracted_audit.json (produced by
  * scripts/extract_constants.py).
  */
-import { SCENARIOS } from '../src/lib/constants/scenarios';
+import { SCENARIO_CONFIGS } from '../src/lib/constants/scenarios';
+const SCENARIOS = SCENARIO_CONFIGS;
 import { BUCKETS } from '../src/lib/constants/extracted';
 import { buildTimeSeries } from '../src/lib/sim/timeSeries';
 import { computeTCO } from '../src/lib/sim/tco';
