@@ -171,7 +171,7 @@ const salesDiff = diffTable('(3) BAU SALES — sim vs Output Summary', year => {
   return row ? row.salesByPT as any : {};
 }, 'sale');
 
-diffTable('(4) BAU STOCK — sim vs Output Summary', year => {
+const stockDiff = diffTable('(4) BAU STOCK — sim vs Output Summary', year => {
   const row = sim.years.find(y => y.year === year);
   return row ? row.stockByPT as any : {};
 }, 'stock');
