@@ -19,17 +19,30 @@ interface Props {
   isComputing: boolean;
 }
 
-const TABS = [
-  { id: 'sales',        label: 'Annual Sales' },
-  { id: 'share',        label: 'Market Share' },
-  { id: 'stock',        label: 'Fleet Stock' },
-  { id: 'emissions',    label: 'Emissions' },
-  { id: 'zet',          label: 'ZET Penetration' },
-  { id: 'seg-sales',    label: 'Sales by Segment' },
-  { id: 'seg-stock',    label: 'Stock by Segment' },
-  { id: 'app-sales',    label: 'Sales by Application' },
-  { id: 'app-stock',    label: 'Stock by Application' },
+interface TabDef {
+  id: string;
+  label: string;
+  preliminary?: boolean;
+}
+
+const TABS: TabDef[] = [
+  { id: 'sales',     label: 'Annual Sales' },
+  { id: 'share',     label: 'Market Share' },
+  { id: 'stock',     label: 'Fleet Stock' },
+  { id: 'emissions', label: 'Emissions' },
+  { id: 'zet',       label: 'ZET Penetration' },
+  { id: 'seg-sales', label: 'Sales by Segment',     preliminary: true },
+  { id: 'seg-stock', label: 'Stock by Segment',     preliminary: true },
+  { id: 'app-sales', label: 'Sales by Application', preliminary: true },
+  { id: 'app-stock', label: 'Stock by Application', preliminary: true },
 ];
+
+const PRELIM_NOTE =
+  'Preliminary grouping — uses vehicle size / use-case from BUCKETS. Will switch to the workbook\u2019s formal 7-segment / 10-application taxonomy after the v3 extraction.';
+
+function PreliminaryBanner() {
+  return <p className="text-xs text-muted-foreground mb-2">{PRELIM_NOTE}</p>;
+}
 
 export default function ChartTabs({ result, policy, scenarioLabel, isComputing }: Props) {
   const [active, setActive] = useState('sales');
@@ -41,6 +54,9 @@ export default function ChartTabs({ result, policy, scenarioLabel, isComputing }
           {TABS.map(t => (
             <TabsTrigger key={t.id} value={t.id} className="text-xs px-3 py-1.5">
               {t.label}
+              {t.preliminary && (
+                <span className="text-[10px] text-muted-foreground ml-1">(preliminary)</span>
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -66,15 +82,19 @@ export default function ChartTabs({ result, policy, scenarioLabel, isComputing }
           <ZETPenetrationChart years={result.years} policy={policy} scenarioLabel={scenarioLabel} />
         </TabsContent>
         <TabsContent value="seg-sales" className="mt-0">
+          <PreliminaryBanner />
           <SegmentSalesChart years={result.years} scenarioLabel={scenarioLabel} />
         </TabsContent>
         <TabsContent value="seg-stock" className="mt-0">
+          <PreliminaryBanner />
           <SegmentStockChart years={result.years} scenarioLabel={scenarioLabel} />
         </TabsContent>
         <TabsContent value="app-sales" className="mt-0">
+          <PreliminaryBanner />
           <ApplicationSalesChart years={result.years} scenarioLabel={scenarioLabel} />
         </TabsContent>
         <TabsContent value="app-stock" className="mt-0">
+          <PreliminaryBanner />
           <ApplicationStockChart years={result.years} scenarioLabel={scenarioLabel} />
         </TabsContent>
       </div>
