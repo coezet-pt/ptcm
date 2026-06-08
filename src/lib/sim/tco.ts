@@ -115,24 +115,24 @@ function computeVehiclePrice(
 
   switch (pt) {
     case 'Diesel': {
-      const price = base.diesel_total * Math.pow(1.03, dy);
+      const price = base.diesel_total * Math.pow(DIESEL_PRICE_CAGR_MULT, dy);
       return price + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
     }
     case 'CNG': {
-      const dieselPrice = base.diesel_total * Math.pow(1.03, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
+      const dieselPrice = base.diesel_total * Math.pow(DIESEL_PRICE_CAGR_MULT, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const tankBase = isSmallSize(bucket.size) ? CNG_TANK_BASE_SMALL : CNG_TANK_BASE_LARGE;
       const tankCost = tankBase * Math.pow(1 + CNG_TANK_GROWTH, dy);
       return dieselPrice + tankCost;
     }
     case 'LNG': {
-      const dieselPrice = base.diesel_total * Math.pow(1.03, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
+      const dieselPrice = base.diesel_total * Math.pow(DIESEL_PRICE_CAGR_MULT, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const lngTankCostPerKg = getValueAtYear(ts.lng_tank_cost_per_kg, year);
       const lngCapacityKg = isSmallSize(bucket.size) ? 450 * 0.35 : 990 * 0.35;
       const valves = getValueAtYear(ts.lng_valves_piping_per_vehicle, year);
       return dieselPrice + lngCapacityKg * lngTankCostPerKg + valves;
     }
     case 'BET': {
-      const dieselBase = base.diesel_total * Math.pow(1.03, dy)
+      const dieselBase = base.diesel_total * Math.pow(DIESEL_PRICE_CAGR_MULT, dy)
         + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const dieselPowertrain = base.engine_trans * getValueAtYear(ts.engine_trans_growth, year);
       const ePowertrain = base.e_powertrain * getValueAtYear(ts.e_powertrain_growth, year);
@@ -149,12 +149,12 @@ function computeVehiclePrice(
       return Math.max(0, withMargin - incentive);
     }
     case 'H2-ICE': {
-      const dieselPrice = base.diesel_total * Math.pow(1.03, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
+      const dieselPrice = base.diesel_total * Math.pow(DIESEL_PRICE_CAGR_MULT, dy) + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const h2TankCost = bucket.h2TankKg * getValueAtYear(ts.h2_tank_cost_per_kg, year);
       return dieselPrice + h2TankCost;
     }
     case 'H2-FCET': {
-      const dieselBase = base.diesel_total * Math.pow(1.03, dy)
+      const dieselBase = base.diesel_total * Math.pow(DIESEL_PRICE_CAGR_MULT, dy)
         + (year >= 2030 ? BS_VII_PRICE_BUMP_2030 : 0);
       const dieselPowertrain = base.engine_trans * getValueAtYear(ts.engine_trans_growth, year);
       const ePowertrain = base.e_powertrain * getValueAtYear(ts.e_powertrain_growth, year);
