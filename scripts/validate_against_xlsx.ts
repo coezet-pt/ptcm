@@ -228,3 +228,6 @@ for (const c of checks) console.log(`  [${c.passed ? 'OK ' : 'FAIL'}] ${c.name}:
 const y2045 = sim.years.find(y => y.year === 2045)!;
 const totalSales2045 = (Object.values(y2045.salesByPT) as number[]).reduce((s,n)=>s+n,0);
 console.log(`\nBET 2045 share: ${(y2045.salesByPT['BET']/totalSales2045*100).toFixed(1)}%  (target ~76%)`);
+
+console.log(`\n=== (8) DIFF TOTALS (|Δ|>${FLAG}%) ===`);
+console.log(`Sales: ${salesDiff.flagged}/${salesDiff.total}   Stock: ${stockDiff.flagged}/${stockDiff.total}   Combined: ${salesDiff.flagged+stockDiff.flagged}/${salesDiff.total+stockDiff.total}`);
